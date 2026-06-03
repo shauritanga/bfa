@@ -3,7 +3,6 @@ import '../../../../core/utils/result.dart';
 import '../../../../core/repositories/base_repository.dart';
 import '../../../../core/config/firebase_config.dart';
 import '../../../../core/services/firestore_service.dart';
-import '../../../../core/errors/failures.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_filter.dart';
 import '../../domain/repositories/product_repository.dart';
@@ -106,26 +105,48 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
     int limit = 20,
   }) async {
     return handleAsyncOperation(() async {
+      print('🔄 ProductRepository: getProducts called with filter: $filter');
+
+      // Check if we need to filter by category
+      if (filter?.categoryIds.isNotEmpty == true) {
+        // Use category-specific filtering
+        return _getProductsWithCategoryFilter(filter!, page, limit);
+      }
+
+      // TEMPORARY FIX: Use simple query to avoid index issues
       Query query = FirebaseFirestore.instance.collection(
         FirebaseCollections.products,
       );
 
-      // Apply filters
-      if (filter != null) {
-        query = _applyFilters(query, filter);
+      // Only apply basic available filter to avoid index issues
+      if (filter?.isAvailable == true || filter == null) {
+        // For now, just get all products without complex filtering
+        query = query.where('isAvailable', isEqualTo: true);
       }
 
-      // Apply sorting
-      if (filter?.sortBy != null) {
-        query = _applySorting(query, filter!.sortBy, filter.sortOrder);
-      }
+      // Simple sorting by creation date (no index required)
+      query = query.orderBy('createdAt', descending: true);
 
       // Apply pagination
       query = query.limit(limit);
-      // Note: Firestore doesn't support offset, so we'll use cursor-based pagination
-      // For now, we'll just limit the results
 
+      print('🔄 ProductRepository: Executing Firestore query...');
       final querySnapshot = await query.get();
+      print(
+        '✅ ProductRepository: Query executed, got ${querySnapshot.docs.length} documents',
+      );
+
+      // Debug: Check first few products for category information
+      if (querySnapshot.docs.isNotEmpty) {
+        for (int i = 0; i < querySnapshot.docs.length.clamp(0, 3); i++) {
+          final doc = querySnapshot.docs[i];
+          final data = doc.data() as Map<String, dynamic>?;
+          print(
+            '🔍 ProductRepository: Product ${doc.id} data: categoryId=${data?['categoryId']}, category=${data?['category']}, name=${data?['name']}',
+          );
+        }
+      }
+
       final products = querySnapshot.docs
           .map(
             (doc) => ProductEntity.fromMap({
@@ -135,19 +156,11 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
           )
           .toList();
 
-      // Get total count for pagination
-      final totalCountQuery = FirebaseFirestore.instance.collection(
-        FirebaseCollections.products,
-      );
-      final totalSnapshot =
-          await (filter != null
-                  ? _applyFilters(totalCountQuery, filter)
-                  : totalCountQuery)
-              .count()
-              .get();
-      final totalItems = totalSnapshot.count ?? 0;
+      print('✅ ProductRepository: Mapped ${products.length} products');
 
-      final totalPages = (totalItems / limit).ceil();
+      // Simplified total count (just use current results for now)
+      final totalItems = querySnapshot.docs.length;
+      final totalPages = 1; // Simplified for now
 
       return PaginatedResult<ProductEntity>(
         items: products,
@@ -155,10 +168,100 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
         totalPages: totalPages,
         totalItems: totalItems,
         itemsPerPage: limit,
-        hasNextPage: page < totalPages,
+        hasNextPage: false, // Simplified for now
         hasPreviousPage: page > 1,
       );
     });
+  }
+
+  /// Get products with category filter - tries multiple approaches
+  Future<PaginatedResult<ProductEntity>> _getProductsWithCategoryFilter(
+    ProductFilter filter,
+    int page,
+    int limit,
+  ) async {
+    print(
+      '🔍 ProductRepository: _getProductsWithCategoryFilter called with categories: ${filter.categoryIds}',
+    );
+
+    // Get all available products first
+    Query query = FirebaseFirestore.instance.collection(
+      FirebaseCollections.products,
+    );
+
+    // Apply basic filters
+    query = query.where('isAvailable', isEqualTo: true);
+    query = query.orderBy('createdAt', descending: true);
+    query = query.limit(100); // Get more products to filter locally
+
+    print(
+      '🔍 ProductRepository: Fetching products for local category filtering...',
+    );
+    final querySnapshot = await query.get();
+    print(
+      '🔍 ProductRepository: Got ${querySnapshot.docs.length} products to filter locally',
+    );
+
+    final allProducts = querySnapshot.docs
+        .map(
+          (doc) => ProductEntity.fromMap({
+            'id': doc.id,
+            ...doc.data() as Map<String, dynamic>,
+          }),
+        )
+        .toList();
+
+    // Filter products locally by category
+    final filteredProducts = <ProductEntity>[];
+    final targetCategories = filter.categoryIds
+        .map((id) => id.toLowerCase())
+        .toSet();
+
+    for (final product in allProducts) {
+      final productCategoryId = product.categoryId.toLowerCase();
+
+      // Check if product category matches any of the target categories
+      // Try exact match first, then partial matches
+      bool matches = false;
+
+      for (final targetCategory in targetCategories) {
+        if (productCategoryId == targetCategory ||
+            productCategoryId.contains(targetCategory) ||
+            targetCategory.contains(productCategoryId)) {
+          matches = true;
+          break;
+        }
+      }
+
+      if (matches) {
+        filteredProducts.add(product);
+        print(
+          '🔍 ProductRepository: Product "${product.name}" matches category filter (categoryId: ${product.categoryId})',
+        );
+      }
+    }
+
+    print(
+      '🔍 ProductRepository: Category filtering complete. Found ${filteredProducts.length} matching products',
+    );
+
+    // Apply pagination to filtered results
+    final startIndex = (page - 1) * limit;
+    final endIndex = (startIndex + limit).clamp(0, filteredProducts.length);
+    final paginatedProducts = filteredProducts.sublist(
+      startIndex.clamp(0, filteredProducts.length),
+      endIndex,
+    );
+
+    return PaginatedResult<ProductEntity>(
+      items: paginatedProducts,
+      currentPage: page,
+      totalPages: (filteredProducts.length / limit).ceil(),
+      totalItems: filteredProducts.length,
+      itemsPerPage: limit,
+      hasNextPage: endIndex < filteredProducts.length,
+      hasPreviousPage: page > 1,
+    );
   }
 
   @override
@@ -167,43 +270,102 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
     int limit = 20,
   }) async {
     return handleAsyncOperation(() async {
-      // Firestore doesn't support full-text search, so we'll use array-contains
-      // for tags and where clauses for name matching
+      print('🔍 ProductRepository: searchProducts called with query: "$query"');
+
+      final searchTerm = query.toLowerCase().trim();
       final results = <ProductEntity>[];
+      final seenIds = <String>{};
 
-      // Search by name (case-insensitive)
-      final nameQuery = FirebaseFirestore.instance
-          .collection(FirebaseCollections.products)
-          .where('name', isGreaterThanOrEqualTo: query)
-          .where('name', isLessThan: '${query}z')
-          .limit(limit);
+      try {
+        // Get all products first (since Firestore has limited search capabilities)
+        final allProductsQuery = FirebaseFirestore.instance
+            .collection(FirebaseCollections.products)
+            .where('isAvailable', isEqualTo: true)
+            .limit(100); // Get more products to search through
 
-      final nameSnapshot = await nameQuery.get();
-      results.addAll(
-        nameSnapshot.docs.map(
-          (doc) => ProductEntity.fromMap({'id': doc.id, ...doc.data()}),
-        ),
-      );
+        print('🔍 ProductRepository: Fetching all available products...');
+        final allProductsSnapshot = await allProductsQuery.get();
+        print(
+          '🔍 ProductRepository: Got ${allProductsSnapshot.docs.length} products to search through',
+        );
 
-      // Search by tags
-      final tagQuery = FirebaseFirestore.instance
-          .collection(FirebaseCollections.products)
-          .where('tags', arrayContains: query.toLowerCase())
-          .limit(limit);
+        // Create a list to store products with their relevance scores
+        final scoredResults = <Map<String, dynamic>>[];
 
-      final tagSnapshot = await tagQuery.get();
-      final tagResults = tagSnapshot.docs.map(
-        (doc) => ProductEntity.fromMap({'id': doc.id, ...doc.data()}),
-      );
+        // Filter products locally for better search results
+        for (final doc in allProductsSnapshot.docs) {
+          try {
+            final data = doc.data();
+            final productName = (data['name'] as String? ?? '').toLowerCase();
+            final productDescription = (data['description'] as String? ?? '')
+                .toLowerCase();
+            final productTags = (data['tags'] as List<dynamic>? ?? [])
+                .map((tag) => tag.toString().toLowerCase())
+                .toList();
 
-      // Merge results and remove duplicates
-      for (final product in tagResults) {
-        if (!results.any((p) => p.id == product.id)) {
-          results.add(product);
+            // Calculate relevance score
+            int score = 0;
+
+            // Exact name match gets highest score
+            if (productName == searchTerm) {
+              score += 100;
+            }
+            // Name starts with search term gets high score
+            else if (productName.startsWith(searchTerm)) {
+              score += 80;
+            }
+            // Name contains search term gets medium score
+            else if (productName.contains(searchTerm)) {
+              score += 60;
+            }
+
+            // Tag matches
+            for (final tag in productTags) {
+              if (tag == searchTerm) {
+                score += 50;
+              } else if (tag.contains(searchTerm)) {
+                score += 30;
+              }
+            }
+
+            // Description contains search term gets lower score
+            if (productDescription.contains(searchTerm)) {
+              score += 20;
+            }
+
+            // Only include products with some relevance
+            if (score > 0 && !seenIds.contains(doc.id)) {
+              final product = ProductEntity.fromMap({'id': doc.id, ...data});
+              scoredResults.add({'product': product, 'score': score});
+              seenIds.add(doc.id);
+            }
+          } catch (e) {
+            print(
+              '⚠️ ProductRepository: Error processing product ${doc.id}: $e',
+            );
+            continue;
+          }
         }
-      }
 
-      return results.take(limit).toList();
+        // Sort by relevance score (highest first) and take the top results
+        scoredResults.sort(
+          (a, b) => (b['score'] as int).compareTo(a['score'] as int),
+        );
+        results.addAll(
+          scoredResults
+              .take(limit)
+              .map((item) => item['product'] as ProductEntity)
+              .toList(),
+        );
+
+        print(
+          '✅ ProductRepository: Search completed, found ${results.length} matching products',
+        );
+        return results;
+      } catch (e) {
+        print('❌ ProductRepository: Search error: $e');
+        rethrow;
+      }
     });
   }
 
@@ -212,14 +374,20 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
     int limit = 10,
   }) async {
     return handleAsyncOperation(() async {
+      print('🔄 ProductRepository: getFeaturedProducts called');
+
+      // TEMPORARY FIX: Simplified query to avoid index issues
       final query = FirebaseFirestore.instance
           .collection(FirebaseCollections.products)
           .where('isFeatured', isEqualTo: true)
-          .where('isAvailable', isEqualTo: true)
-          .orderBy('rating', descending: true)
           .limit(limit);
 
+      print('🔄 ProductRepository: Executing featured products query...');
       final snapshot = await query.get();
+      print(
+        '✅ ProductRepository: Featured products query executed, got ${snapshot.docs.length} documents',
+      );
+
       return snapshot.docs
           .map((doc) => ProductEntity.fromMap({'id': doc.id, ...doc.data()}))
           .toList();
@@ -229,19 +397,22 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
   @override
   Future<Result<List<ProductEntity>>> getFreshProducts({int limit = 10}) async {
     return handleAsyncOperation(() async {
-      final threeDaysAgo = DateTime.now().subtract(const Duration(days: 3));
+      print('🔄 ProductRepository: getFreshProducts called');
 
+      // TEMPORARY FIX: Simplified query to avoid index issues
+      // Just get available products ordered by creation date
       final query = FirebaseFirestore.instance
           .collection(FirebaseCollections.products)
           .where('isAvailable', isEqualTo: true)
-          .where(
-            'harvestDate',
-            isGreaterThanOrEqualTo: threeDaysAgo.toIso8601String(),
-          )
-          .orderBy('harvestDate', descending: true)
+          .orderBy('createdAt', descending: true)
           .limit(limit);
 
+      print('🔄 ProductRepository: Executing fresh products query...');
       final snapshot = await query.get();
+      print(
+        '✅ ProductRepository: Fresh products query executed, got ${snapshot.docs.length} documents',
+      );
+
       return snapshot.docs
           .map((doc) => ProductEntity.fromMap({'id': doc.id, ...doc.data()}))
           .toList();
@@ -334,7 +505,15 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
     }
 
     if (filter.categoryIds.isNotEmpty) {
+      print(
+        '🔍 ProductRepository: Filtering by categories: ${filter.categoryIds}',
+      );
+      // Try filtering by categoryId first, if that doesn't work, we'll filter by category field
       query = query.where('categoryId', whereIn: filter.categoryIds);
+    } else {
+      print(
+        '🔍 ProductRepository: No category filter applied (showing all products)',
+      );
     }
 
     if (filter.farmerIds.isNotEmpty) {

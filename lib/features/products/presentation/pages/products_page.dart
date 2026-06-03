@@ -2,23 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
+import 'package:hugeicons/hugeicons.dart';
 import '../providers/product_provider.dart';
+import '../providers/category_provider.dart';
 import '../widgets/product_card.dart';
 import '../widgets/product_filter_sheet.dart';
-import '../widgets/product_search_bar.dart';
+import '../widgets/category_chips_widget.dart';
+import '../../../cart/presentation/providers/cart_provider.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../shared/widgets/loading_widget.dart';
 import '../../../../shared/widgets/error_widget.dart';
+import '../../../../shared/widgets/app_bar_widget.dart';
 
 class ProductsPage extends ConsumerStatefulWidget {
   final String? categoryId;
   final String? searchQuery;
 
-  const ProductsPage({
-    super.key,
-    this.categoryId,
-    this.searchQuery,
-  });
+  const ProductsPage({super.key, this.categoryId, this.searchQuery});
 
   @override
   ConsumerState<ProductsPage> createState() => _ProductsPageState();
@@ -32,19 +33,24 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    
-    // Apply initial filters if provided
+
+    // Load initial products and apply filters if provided
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.categoryId != null) {
-        ref.read(productProvider.notifier).applyFilter(
-          ref.read(productProvider).currentFilter.copyWith(
-            categoryIds: [widget.categoryId!],
-          ),
-        );
-      }
-      
-      if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
-        ref.read(productProvider.notifier).searchProducts(widget.searchQuery!);
+        // Set the category in the category provider
+        ref.read(categoryProvider.notifier).selectCategory(widget.categoryId!);
+        // Apply filter to products
+        ref
+            .read(productProvider.notifier)
+            .applyFilter(
+              ref
+                  .read(productProvider)
+                  .currentFilter
+                  .copyWith(categoryIds: [widget.categoryId!]),
+            );
+      } else {
+        // Load all products by default
+        ref.read(productProvider.notifier).loadProducts(refresh: true);
       }
     });
   }
@@ -56,10 +62,73 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
   }
 
   void _onScroll() {
-    if (_scrollController.position.pixels >= 
+    if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
       ref.read(productProvider.notifier).loadMoreProducts();
     }
+  }
+
+  void _onCategorySelected(String categoryId) {
+    if (categoryId == 'all') {
+      // Show all products - clear category filter
+      ref
+          .read(productProvider.notifier)
+          .applyFilter(
+            ref
+                .read(productProvider)
+                .currentFilter
+                .copyWith(
+                  categoryIds: [], // Clear category filter
+                ),
+          );
+    } else {
+      // Filter by selected category
+      ref
+          .read(productProvider.notifier)
+          .applyFilter(
+            ref
+                .read(productProvider)
+                .currentFilter
+                .copyWith(categoryIds: [categoryId]),
+          );
+    }
+  }
+
+  void _addToCart(dynamic product) {
+    // Add item to cart with default quantity of 1
+    ref.read(cartProvider.notifier).addItem(product: product, quantity: 1.0);
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              Icons.check_circle,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
+            SizedBox(width: 8.w),
+            Expanded(
+              child: Text(
+                '${product.name} added to cart!',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        action: SnackBarAction(
+          label: 'View Cart',
+          textColor: Theme.of(context).colorScheme.onPrimary,
+          onPressed: () {
+            context.pushNamed('/cart'); // Navigate to cart page
+          },
+        ),
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -68,12 +137,20 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.categoryId != null ? 'Category Products' : 'Products'),
-        centerTitle: true,
+      appBar: ShoppingAppBar(
+        title: widget.categoryId != null ? 'Category Products' : 'Products',
+
         actions: [
           IconButton(
-            icon: Icon(_isGridView ? Icons.list : Icons.grid_view),
+            icon: const Icon(HugeIcons.strokeRoundedSearch01),
+            onPressed: () {
+              context.pushNamed(AppRoute.search.name);
+            },
+          ),
+          IconButton(
+            icon: Icon(
+              _isGridView ? Icons.list : HugeIcons.strokeRoundedGridView,
+            ),
             onPressed: () {
               setState(() {
                 _isGridView = !_isGridView;
@@ -81,32 +158,27 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.filter_list),
+            icon: const Icon(HugeIcons.strokeRoundedFilter),
             onPressed: () => _showFilterSheet(context),
           ),
         ],
       ),
       body: Column(
         children: [
-          // Search Bar
-          Padding(
-            padding: EdgeInsets.all(AppConstants.defaultPadding.w),
-            child: ProductSearchBar(
-              initialQuery: widget.searchQuery,
-              onSearch: (query) {
-                ref.read(productProvider.notifier).searchProducts(query);
-              },
-              onClear: () {
-                ref.read(productProvider.notifier).loadProducts(refresh: true);
-              },
-            ),
+          // Category Chips
+          CategoryChipsWidget(
+            onCategorySelected: (categoryId) {
+              _onCategorySelected(categoryId);
+            },
           ),
 
-          // Filter Chips
-          if (productState.currentFilter.hasActiveFilters)
+          // Filter Chips - Only show for non-category filters to maintain consistent spacing
+          if (productState.currentFilter.hasActiveFiltersExcludingCategory)
             Container(
               height: 50.h,
-              padding: EdgeInsets.symmetric(horizontal: AppConstants.defaultPadding.w),
+              padding: EdgeInsets.symmetric(
+                horizontal: AppConstants.defaultPadding.w,
+              ),
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: _buildFilterChips(productState),
@@ -114,9 +186,7 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
             ),
 
           // Products List/Grid
-          Expanded(
-            child: _buildProductsList(productState, theme),
-          ),
+          Expanded(child: _buildProductsList(productState, theme)),
         ],
       ),
     );
@@ -131,12 +201,14 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
       return Center(
         child: AppErrorWidget(
           message: productState.error!,
-          onRetry: () => ref.read(productProvider.notifier).loadProducts(refresh: true),
+          onRetry: () =>
+              ref.read(productProvider.notifier).loadProducts(refresh: true),
         ),
       );
     }
 
-    final products = widget.searchQuery != null && widget.searchQuery!.isNotEmpty
+    final products =
+        widget.searchQuery != null && widget.searchQuery!.isNotEmpty
         ? productState.searchResults
         : productState.products;
 
@@ -176,7 +248,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(productProvider.notifier).loadProducts(refresh: true),
+      onRefresh: () =>
+          ref.read(productProvider.notifier).loadProducts(refresh: true),
       child: _isGridView ? _buildGridView(products) : _buildListView(products),
     );
   }
@@ -191,7 +264,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
         crossAxisSpacing: 12.w,
         mainAxisSpacing: 12.h,
       ),
-      itemCount: products.length + (ref.watch(productProvider).isLoadingMore ? 2 : 0),
+      itemCount:
+          products.length + (ref.watch(productProvider).isLoadingMore ? 2 : 0),
       itemBuilder: (context, index) {
         if (index >= products.length) {
           return const Center(child: LoadingWidget());
@@ -200,7 +274,15 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
         final product = products[index];
         return ProductCard(
           product: product,
-          onTap: () => context.push('/products/${product.id}'),
+          onTap: () {
+            context.goNamed(
+              AppRoute.productDetails.name,
+              pathParameters: {'id': product.id},
+            );
+          },
+          onAddToCart: () {
+            _addToCart(product);
+          },
         );
       },
     );
@@ -210,7 +292,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     return ListView.builder(
       controller: _scrollController,
       padding: EdgeInsets.all(AppConstants.defaultPadding.w),
-      itemCount: products.length + (ref.watch(productProvider).isLoadingMore ? 1 : 0),
+      itemCount:
+          products.length + (ref.watch(productProvider).isLoadingMore ? 1 : 0),
       itemBuilder: (context, index) {
         if (index >= products.length) {
           return const Center(child: LoadingWidget());
@@ -220,7 +303,15 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
         return ProductCard(
           product: product,
           isListView: true,
-          onTap: () => context.push('/products/${product.id}'),
+          onTap: () {
+            context.goNamed(
+              AppRoute.productDetails.name,
+              pathParameters: {'id': product.id},
+            );
+          },
+          onAddToCart: () {
+            _addToCart(product);
+          },
         );
       },
     );
@@ -231,41 +322,49 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     final filter = productState.currentFilter;
 
     if (filter.isOrganic == true) {
-      chips.add(_buildFilterChip('Organic', () {
-        ref.read(productProvider.notifier).applyFilter(
-          filter.copyWith(isOrganic: null),
-        );
-      }));
+      chips.add(
+        _buildFilterChip('Organic', () {
+          ref
+              .read(productProvider.notifier)
+              .applyFilter(filter.copyWith(isOrganic: null));
+        }),
+      );
     }
 
     if (filter.isFeatured == true) {
-      chips.add(_buildFilterChip('Featured', () {
-        ref.read(productProvider.notifier).applyFilter(
-          filter.copyWith(isFeatured: null),
-        );
-      }));
+      chips.add(
+        _buildFilterChip('Featured', () {
+          ref
+              .read(productProvider.notifier)
+              .applyFilter(filter.copyWith(isFeatured: null));
+        }),
+      );
     }
 
     if (filter.isFresh == true) {
-      chips.add(_buildFilterChip('Fresh', () {
-        ref.read(productProvider.notifier).applyFilter(
-          filter.copyWith(isFresh: null),
-        );
-      }));
+      chips.add(
+        _buildFilterChip('Fresh', () {
+          ref
+              .read(productProvider.notifier)
+              .applyFilter(filter.copyWith(isFresh: null));
+        }),
+      );
     }
 
     if (filter.minPrice != null || filter.maxPrice != null) {
       final priceText = filter.minPrice != null && filter.maxPrice != null
           ? '\$${filter.minPrice!.toStringAsFixed(0)} - \$${filter.maxPrice!.toStringAsFixed(0)}'
           : filter.minPrice != null
-              ? 'Min \$${filter.minPrice!.toStringAsFixed(0)}'
-              : 'Max \$${filter.maxPrice!.toStringAsFixed(0)}';
-      
-      chips.add(_buildFilterChip(priceText, () {
-        ref.read(productProvider.notifier).applyFilter(
-          filter.copyWith(minPrice: null, maxPrice: null),
-        );
-      }));
+          ? 'Min \$${filter.minPrice!.toStringAsFixed(0)}'
+          : 'Max \$${filter.maxPrice!.toStringAsFixed(0)}';
+
+      chips.add(
+        _buildFilterChip(priceText, () {
+          ref
+              .read(productProvider.notifier)
+              .applyFilter(filter.copyWith(minPrice: null, maxPrice: null));
+        }),
+      );
     }
 
     if (chips.isNotEmpty) {
@@ -298,7 +397,8 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: RoundedRectangleBorder(
+      useRootNavigator: true,
+      shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
           top: Radius.circular(AppConstants.defaultBorderRadius),
         ),

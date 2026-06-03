@@ -26,14 +26,12 @@ class AppTheme {
       subThemesData: const FlexSubThemesData(
         blendOnLevel: 10,
         blendOnColors: false,
-        useMaterial3Typography: true,
         useM2StyleDividerInM3: true,
         alignedDropdown: true,
         useInputDecoratorThemeInDialogs: true,
 
         // AppBar styling
         appBarBackgroundSchemeColor: SchemeColor.primary,
-        appBarCenterTitle: true,
         appBarScrolledUnderElevation: 2,
 
         // Card styling
@@ -152,14 +150,12 @@ class AppTheme {
       blendLevel: 13,
       subThemesData: const FlexSubThemesData(
         blendOnLevel: 20,
-        useMaterial3Typography: true,
         useM2StyleDividerInM3: true,
         alignedDropdown: true,
         useInputDecoratorThemeInDialogs: true,
 
         // AppBar styling
         appBarBackgroundSchemeColor: SchemeColor.surface,
-        appBarCenterTitle: true,
         appBarScrolledUnderElevation: 2,
 
         // Card styling

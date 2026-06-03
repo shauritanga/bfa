@@ -1,233 +1,244 @@
+import 'package:bfa/features/home/presentation/pages/home_page.dart';
+import 'package:bfa/features/products/presentation/pages/product_details.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../screens/client_shell.dart';
+import '../screens/splash_screen.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/onboarding/presentation/pages/onboarding_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/profile_page.dart';
 import '../../features/products/presentation/pages/products_page.dart';
 import '../../features/cart/presentation/pages/cart_page.dart';
-import '../constants/app_routes.dart';
 
-/// Router configuration for the app
-class AppRouter {
-  static final _rootNavigatorKey = GlobalKey<NavigatorState>();
+import '../../features/checkout/presentation/screens/checkout_screen.dart';
+import '../../features/orders/presentation/screens/orders.dart';
+import '../../features/orders/presentation/screens/order_details_screen.dart';
+import '../../features/favorites/presentation/screens/favorites_screen.dart';
+import '../../features/search/presentation/pages/search_page.dart';
+import 'app_routes.dart';
 
-  /// Create the router configuration
-  static GoRouter createRouter(Ref ref) {
-    return GoRouter(
-      navigatorKey: _rootNavigatorKey,
-      debugLogDiagnostics: true,
-      initialLocation: AppRoutes.splash,
+// Global navigator keys for StatefulShellRoute
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final _homeNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'home');
+final _productsNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'products');
+final _cartNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'cart');
+final _profileNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'profile');
 
-      // Redirect logic based on authentication state
-      redirect: (context, state) {
-        final isAuthenticated = ref.read(isAuthenticatedProvider);
-        final isLoading = ref.read(authLoadingProvider);
+final routerProvider = Provider<GoRouter>((ref) {
+  return GoRouter(
+    navigatorKey: _rootNavigatorKey,
+    debugLogDiagnostics: true,
+    initialLocation: "/splash",
 
-        // If still loading auth state, stay on splash
-        if (isLoading && state.uri.toString() == AppRoutes.splash) {
-          return null;
-        }
+    // Redirect logic based on authentication and onboarding state
+    redirect: (context, state) {
+      final isAuthenticated = ref.read(isAuthenticatedProvider);
+      final isLoading = ref.read(authLoadingProvider);
+      final currentPath = state.uri.toString();
 
-        // Define public routes that don't require authentication
-        final publicRoutes = [
-          AppRoutes.splash,
-          AppRoutes.login,
-          AppRoutes.register,
-          AppRoutes.forgotPassword,
-        ];
+      // If still loading auth state, stay on splash
+      if (isLoading && currentPath == "/splash") {
+        return null;
+      }
 
-        final isPublicRoute = publicRoutes.contains(state.uri.toString());
+      // Define public routes that don't require authentication
+      final publicRoutes = [
+        "/splash",
+        "/onboarding",
+        "/login",
+        "/register",
+        "/forgot-password",
+      ];
 
-        // If user is not authenticated and trying to access protected route
-        if (!isAuthenticated && !isPublicRoute) {
-          return AppRoutes.login;
-        }
+      final isPublicRoute = publicRoutes.contains(currentPath);
 
-        // If user is authenticated and on auth pages, redirect to home
-        if (isAuthenticated &&
-            isPublicRoute &&
-            state.uri.toString() != AppRoutes.splash) {
-          return AppRoutes.home;
-        }
+      // Simplified logic: protect authenticated routes only
+      if (!isAuthenticated && !isPublicRoute) {
+        return "/login";
+      }
 
-        return null; // No redirect needed
-      },
+      // If user is authenticated and on auth pages, redirect to home
+      if (isAuthenticated &&
+          (currentPath == "/login" || currentPath == "/register")) {
+        return "/home";
+      }
 
-      routes: [
-        // Splash Route
-        GoRoute(
-          path: AppRoutes.splash,
-          name: 'splash',
-          builder: (context, state) => const SplashScreen(),
-        ),
+      return null; // No redirect needed
+    },
 
-        // Authentication Routes
-        GoRoute(
-          path: AppRoutes.login,
-          name: 'login',
-          builder: (context, state) => const LoginPage(),
-        ),
+    routes: [
+      // Splash Route
+      GoRoute(
+        path: "/splash",
+        name: AppRoute.splash.name,
+        builder: (context, state) => const SplashScreen(),
+      ),
 
-        GoRoute(
-          path: AppRoutes.register,
-          name: 'register',
-          builder: (context, state) => const RegisterPage(),
-        ),
+      // Onboarding Route
+      GoRoute(
+        path: "/onboarding",
+        name: AppRoute.onboarding.name,
+        builder: (context, state) => const OnboardingPage(),
+      ),
 
-        GoRoute(
-          path: AppRoutes.forgotPassword,
-          name: 'forgot-password',
-          builder: (context, state) => const ForgotPasswordPage(),
-        ),
+      // Authentication Routes
+      GoRoute(
+        path: "/login",
+        name: AppRoute.login.name,
+        builder: (context, state) => const LoginPage(),
+      ),
 
-        // Main App Routes (Protected)
-        GoRoute(
-          path: AppRoutes.home,
-          name: 'home',
-          builder: (context, state) => const HomePage(),
-        ),
+      GoRoute(
+        path: "/register",
+        name: AppRoute.register.name,
+        builder: (context, state) => const RegisterPage(),
+      ),
 
-        GoRoute(
-          path: AppRoutes.profile,
-          name: 'profile',
-          builder: (context, state) => const ProfilePage(),
-        ),
+      GoRoute(
+        name: AppRoute.forgotPassword.name,
+        path: "/forgot-password",
+        builder: (context, state) => const ForgotPasswordPage(),
+      ),
 
-        // Products Routes
-        GoRoute(
-          path: AppRoutes.products,
-          name: 'products',
-          builder: (context, state) => const ProductsPage(),
-        ),
+      // Search Route
+      GoRoute(
+        path: "/search",
+        name: AppRoute.search.name,
+        builder: (context, state) {
+          final query = state.uri.queryParameters['q'];
+          return SearchPage(initialQuery: query);
+        },
+      ),
 
-        GoRoute(
-          path: AppRoutes.productDetails,
-          name: 'product-details',
-          builder: (context, state) {
-            final productId = state.pathParameters['id']!;
-            return ProductDetailsPlaceholder(productId: productId);
-          },
-        ),
-
-        GoRoute(
-          path: AppRoutes.categoryProducts,
-          name: 'category-products',
-          builder: (context, state) {
-            final categoryId = state.pathParameters['id']!;
-            return ProductsPage(categoryId: categoryId);
-          },
-        ),
-
-        // Cart Route
-        GoRoute(
-          path: AppRoutes.cart,
-          name: 'cart',
-          builder: (context, state) => const CartPage(),
-        ),
-
-        // TODO: Add more routes as features are implemented
-
-        // GoRoute(
-        //   path: AppRoutes.orders,
-        //   name: 'orders',
-        //   builder: (context, state) => const OrdersPage(),
-        // ),
-      ],
-
-      // Error handling
-      errorBuilder: (context, state) => Scaffold(
-        appBar: AppBar(title: const Text('Page Not Found')),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 64, color: Colors.red),
-              const SizedBox(height: 16),
-              Text(
-                'Page not found: ${state.uri.toString()}',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => context.go(AppRoutes.home),
-                child: const Text('Go Home'),
+      // Main App Routes (Protected) - Stateful Shell with Bottom Navigation
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return ClientShell(navigationShell: navigationShell);
+        },
+        branches: [
+          // Home Branch
+          StatefulShellBranch(
+            navigatorKey: _homeNavigatorKey,
+            routes: [
+              GoRoute(
+                path: "/home",
+                name: AppRoute.home.name,
+                pageBuilder: (context, state) =>
+                    const NoTransitionPage(child: HomePage()),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
 
-/// Router provider
-final routerProvider = Provider<GoRouter>((ref) {
-  return AppRouter.createRouter(ref);
-});
-
-// Temporary placeholder widgets - these will be replaced with actual implementations
-class SplashScreen extends StatelessWidget {
-  const SplashScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(body: Center(child: CircularProgressIndicator()));
-  }
-}
-
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Home'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: () => context.push('/profile'),
+          // Products Branch
+          StatefulShellBranch(
+            navigatorKey: _productsNavigatorKey,
+            routes: [
+              GoRoute(
+                path: "/products",
+                name: AppRoute.products.name,
+                pageBuilder: (context, state) =>
+                    const NoTransitionPage(child: ProductsPage()),
+                routes: [
+                  // Product Details - nested route
+                  GoRoute(
+                    path: ":id",
+                    name: AppRoute.productDetails.name,
+                    builder: (context, state) {
+                      final productId = state.pathParameters['id']!;
+                      return ProductDetailsScreen(productId: productId);
+                    },
+                  ),
+                ],
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.shopping_bag),
-            onPressed: () => context.push('/products'),
+
+          // Cart Branch
+          StatefulShellBranch(
+            navigatorKey: _cartNavigatorKey,
+            routes: [
+              GoRoute(
+                path: "/cart",
+                name: AppRoute.cart.name,
+                pageBuilder: (context, state) =>
+                    const NoTransitionPage(child: CartPage()),
+                routes: [
+                  // Checkout - nested route
+                  GoRoute(
+                    path: "checkout",
+                    name: AppRoute.checkout.name,
+                    builder: (context, state) => const CheckoutScreen(),
+                  ),
+                ],
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.shopping_cart),
-            onPressed: () => context.push('/cart'),
+          // Profile Branch
+          StatefulShellBranch(
+            navigatorKey: _profileNavigatorKey,
+            routes: [
+              GoRoute(
+                path: "/profile",
+                name: AppRoute.profile.name,
+                pageBuilder: (context, state) =>
+                    const NoTransitionPage(child: ProfilePage()),
+                routes: [
+                  // Orders - nested route
+                  GoRoute(
+                    path: "orders",
+                    name: AppRoute.orders.name,
+                    builder: (context, state) => const OrdersScreen(),
+                    routes: [
+                      // Order Details - nested route
+                      GoRoute(
+                        path: ":id",
+                        name: AppRoute.orderDetails.name,
+                        builder: (context, state) {
+                          final orderId = state.pathParameters['id']!;
+                          return OrderDetailsScreen(orderId: orderId);
+                        },
+                      ),
+                    ],
+                  ),
+                  // Favorites/Wishlist - nested route
+                  GoRoute(
+                    path: "favorites",
+                    name: AppRoute.favorites.name,
+                    builder: (context, state) => const FavoritesScreen(),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),
-      body: const Center(child: Text('Welcome to FreshCrops!')),
-    );
-  }
-}
+    ],
 
-class ProductDetailsPlaceholder extends StatelessWidget {
-  final String productId;
-
-  const ProductDetailsPlaceholder({super.key, required this.productId});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Product Details')),
+    // Error handling
+    errorBuilder: (context, state) => Scaffold(
+      appBar: AppBar(title: const Text('Page Not Found')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.construction, size: 64),
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
             const SizedBox(height: 16),
-            const Text('Product Details Page'),
-            Text('Product ID: $productId'),
+            Text(
+              'Page not found: ${state.uri.toString()}',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 16),
-            const Text('Coming Soon!'),
+            ElevatedButton(
+              onPressed: () => context.goNamed(AppRoute.home.name),
+              child: const Text('Go Home'),
+            ),
           ],
         ),
       ),
-    );
-  }
-}
+    ),
+  );
+});

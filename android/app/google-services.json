@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "344267541233",
+    "project_id": "best-farmer-africa",
+    "storage_bucket": "best-farmer-africa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:344267541233:android:8dc6cfa96938ed69a2f750",
+        "android_client_info": {
+          "package_name": "com.example.bfa"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCjxcRBBPKwSkWbrVN4cuymrcftHOOQC5A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

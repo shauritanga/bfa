@@ -3,7 +3,6 @@ import '../../../../core/utils/result.dart';
 import '../../../../core/repositories/base_repository.dart';
 import '../../../../core/config/firebase_config.dart';
 import '../../../../core/services/firestore_service.dart';
-import '../../../../core/errors/failures.dart';
 import '../../domain/entities/order_entity.dart';
 import '../../domain/entities/order_item_entity.dart';
 import '../../domain/entities/delivery_info_entity.dart';

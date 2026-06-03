@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/services/firestore_service.dart';
 import '../../domain/entities/cart_entity.dart';
 import '../../domain/entities/cart_item_entity.dart';
 import '../../domain/repositories/cart_repository.dart';
@@ -15,6 +14,7 @@ class CartState {
   final bool isUpdating;
   final String? error;
   final CartValidationResult? validationResult;
+  final bool wasRecentlyCleared;
 
   const CartState({
     this.cart,
@@ -22,6 +22,7 @@ class CartState {
     this.isUpdating = false,
     this.error,
     this.validationResult,
+    this.wasRecentlyCleared = false,
   });
 
   /// Get cart item count
@@ -51,6 +52,7 @@ class CartState {
     bool? isUpdating,
     String? error,
     CartValidationResult? validationResult,
+    bool? wasRecentlyCleared,
   }) {
     return CartState(
       cart: cart ?? this.cart,
@@ -58,13 +60,13 @@ class CartState {
       isUpdating: isUpdating ?? this.isUpdating,
       error: error,
       validationResult: validationResult ?? this.validationResult,
+      wasRecentlyCleared: wasRecentlyCleared ?? this.wasRecentlyCleared,
     );
   }
 }
 
 /// Cart notifier for managing cart state
 class CartNotifier extends StateNotifier<CartState> {
-  final CartRepository _repository;
   final GetUserCartUseCase _getUserCartUseCase;
   final AddItemToCartUseCase _addItemToCartUseCase;
   final UpdateCartItemQuantityUseCase _updateCartItemQuantityUseCase;
@@ -77,7 +79,6 @@ class CartNotifier extends StateNotifier<CartState> {
   String? _currentUserId;
 
   CartNotifier(
-    this._repository,
     this._getUserCartUseCase,
     this._addItemToCartUseCase,
     this._updateCartItemQuantityUseCase,
@@ -91,7 +92,7 @@ class CartNotifier extends StateNotifier<CartState> {
   /// Set current user and load their cart
   Future<void> setUser(String userId) async {
     if (_currentUserId == userId) return;
-    
+
     _currentUserId = userId;
     await loadCart();
   }
@@ -106,10 +107,7 @@ class CartNotifier extends StateNotifier<CartState> {
       final result = await _getUserCartUseCase(_currentUserId!);
 
       if (result.isSuccess) {
-        state = state.copyWith(
-          cart: result.data,
-          isLoading: false,
-        );
+        state = state.copyWith(cart: result.data, isLoading: false);
       } else {
         state = state.copyWith(
           isLoading: false,
@@ -143,10 +141,7 @@ class CartNotifier extends StateNotifier<CartState> {
       );
 
       if (result.isSuccess) {
-        state = state.copyWith(
-          cart: result.data,
-          isUpdating: false,
-        );
+        state = state.copyWith(cart: result.data, isUpdating: false);
       } else {
         state = state.copyWith(
           isUpdating: false,
@@ -178,10 +173,7 @@ class CartNotifier extends StateNotifier<CartState> {
       );
 
       if (result.isSuccess) {
-        state = state.copyWith(
-          cart: result.data,
-          isUpdating: false,
-        );
+        state = state.copyWith(cart: result.data, isUpdating: false);
       } else {
         state = state.copyWith(
           isUpdating: false,
@@ -209,10 +201,7 @@ class CartNotifier extends StateNotifier<CartState> {
       );
 
       if (result.isSuccess) {
-        state = state.copyWith(
-          cart: result.data,
-          isUpdating: false,
-        );
+        state = state.copyWith(cart: result.data, isUpdating: false);
       } else {
         state = state.copyWith(
           isUpdating: false,
@@ -240,6 +229,7 @@ class CartNotifier extends StateNotifier<CartState> {
         state = state.copyWith(
           cart: result.data,
           isUpdating: false,
+          wasRecentlyCleared: true,
         );
       } else {
         state = state.copyWith(
@@ -272,10 +262,7 @@ class CartNotifier extends StateNotifier<CartState> {
       );
 
       if (result.isSuccess) {
-        state = state.copyWith(
-          cart: result.data,
-          isUpdating: false,
-        );
+        state = state.copyWith(cart: result.data, isUpdating: false);
       } else {
         state = state.copyWith(
           isUpdating: false,
@@ -300,10 +287,7 @@ class CartNotifier extends StateNotifier<CartState> {
       final result = await _removeCouponUseCase(_currentUserId!);
 
       if (result.isSuccess) {
-        state = state.copyWith(
-          cart: result.data,
-          isUpdating: false,
-        );
+        state = state.copyWith(cart: result.data, isUpdating: false);
       } else {
         state = state.copyWith(
           isUpdating: false,
@@ -338,6 +322,11 @@ class CartNotifier extends StateNotifier<CartState> {
     state = state.copyWith(error: null);
   }
 
+  /// Clear the recently cleared flag
+  void clearRecentlyClearedFlag() {
+    state = state.copyWith(wasRecentlyCleared: false);
+  }
+
   /// Check if product is in cart
   bool isProductInCart(String productId) {
     return state.cart?.containsProduct(productId) ?? false;
@@ -367,12 +356,15 @@ final addItemToCartUseCaseProvider = Provider<AddItemToCartUseCase>((ref) {
   return AddItemToCartUseCase(repository);
 });
 
-final updateCartItemQuantityUseCaseProvider = Provider<UpdateCartItemQuantityUseCase>((ref) {
-  final repository = ref.watch(cartRepositoryProvider);
-  return UpdateCartItemQuantityUseCase(repository);
-});
+final updateCartItemQuantityUseCaseProvider =
+    Provider<UpdateCartItemQuantityUseCase>((ref) {
+      final repository = ref.watch(cartRepositoryProvider);
+      return UpdateCartItemQuantityUseCase(repository);
+    });
 
-final removeItemFromCartUseCaseProvider = Provider<RemoveItemFromCartUseCase>((ref) {
+final removeItemFromCartUseCaseProvider = Provider<RemoveItemFromCartUseCase>((
+  ref,
+) {
   final repository = ref.watch(cartRepositoryProvider);
   return RemoveItemFromCartUseCase(repository);
 });
@@ -399,18 +391,20 @@ final validateCartUseCaseProvider = Provider<ValidateCartUseCase>((ref) {
 
 /// Cart state provider
 final cartProvider = StateNotifierProvider<CartNotifier, CartState>((ref) {
-  final repository = ref.watch(cartRepositoryProvider);
   final getUserCartUseCase = ref.watch(getUserCartUseCaseProvider);
   final addItemToCartUseCase = ref.watch(addItemToCartUseCaseProvider);
-  final updateCartItemQuantityUseCase = ref.watch(updateCartItemQuantityUseCaseProvider);
-  final removeItemFromCartUseCase = ref.watch(removeItemFromCartUseCaseProvider);
+  final updateCartItemQuantityUseCase = ref.watch(
+    updateCartItemQuantityUseCaseProvider,
+  );
+  final removeItemFromCartUseCase = ref.watch(
+    removeItemFromCartUseCaseProvider,
+  );
   final clearCartUseCase = ref.watch(clearCartUseCaseProvider);
   final applyCouponUseCase = ref.watch(applyCouponUseCaseProvider);
   final removeCouponUseCase = ref.watch(removeCouponUseCaseProvider);
   final validateCartUseCase = ref.watch(validateCartUseCaseProvider);
 
   return CartNotifier(
-    repository,
     getUserCartUseCase,
     addItemToCartUseCase,
     updateCartItemQuantityUseCase,

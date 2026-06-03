@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/services/firestore_service.dart';
-import '../../../../core/repositories/base_repository.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_filter.dart';
 import '../../domain/repositories/product_repository.dart';
@@ -84,24 +83,51 @@ class ProductNotifier extends StateNotifier<ProductState> {
 
   /// Load initial data (featured and fresh products)
   Future<void> _loadInitialData() async {
+    print('🔄 ProductNotifier: Starting to load initial data...');
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      // Load featured products
-      final featuredResult = await _getFeaturedProductsUseCase();
-      if (featuredResult.isSuccess) {
-        state = state.copyWith(featuredProducts: featuredResult.data!);
-      }
-
-      // Load fresh products
-      final freshResult = await _getFreshProductsUseCase();
-      if (freshResult.isSuccess) {
-        state = state.copyWith(freshProducts: freshResult.data!);
-      }
-
-      // Load initial products
+      // Load initial products first (simpler query)
+      print('🔄 ProductNotifier: Loading initial products...');
       await loadProducts();
+
+      // Load featured products (may fail due to missing index)
+      print('🔄 ProductNotifier: Loading featured products...');
+      try {
+        final featuredResult = await _getFeaturedProductsUseCase();
+        if (featuredResult.isSuccess) {
+          print(
+            '✅ ProductNotifier: Featured products loaded: ${featuredResult.data!.length}',
+          );
+          state = state.copyWith(featuredProducts: featuredResult.data!);
+        } else {
+          print(
+            '❌ ProductNotifier: Featured products failed: ${featuredResult.failure?.message}',
+          );
+        }
+      } catch (e) {
+        print('❌ ProductNotifier: Featured products error: $e');
+      }
+
+      // Load fresh products (may fail due to missing index)
+      print('🔄 ProductNotifier: Loading fresh products...');
+      try {
+        final freshResult = await _getFreshProductsUseCase();
+        if (freshResult.isSuccess) {
+          print(
+            '✅ ProductNotifier: Fresh products loaded: ${freshResult.data!.length}',
+          );
+          state = state.copyWith(freshProducts: freshResult.data!);
+        } else {
+          print(
+            '❌ ProductNotifier: Fresh products failed: ${freshResult.failure?.message}',
+          );
+        }
+      } catch (e) {
+        print('❌ ProductNotifier: Fresh products error: $e');
+      }
     } catch (e) {
+      print('❌ ProductNotifier: Initial data loading failed: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to load initial data: $e',
@@ -111,6 +137,8 @@ class ProductNotifier extends StateNotifier<ProductState> {
 
   /// Load products with current filter
   Future<void> loadProducts({bool refresh = false}) async {
+    print('🔄 ProductNotifier: loadProducts called (refresh: $refresh)');
+
     if (refresh) {
       state = state.copyWith(
         isLoading: true,
@@ -119,12 +147,16 @@ class ProductNotifier extends StateNotifier<ProductState> {
         hasMoreProducts: true,
       );
     } else if (state.isLoading || state.isLoadingMore) {
+      print('⚠️ ProductNotifier: Already loading, skipping...');
       return; // Already loading
     } else {
       state = state.copyWith(isLoading: true, error: null);
     }
 
     try {
+      print(
+        '🔄 ProductNotifier: Calling _getProductsUseCase with filter: ${state.currentFilter}',
+      );
       final result = await _getProductsUseCase(
         filter: state.currentFilter,
         page: refresh ? 1 : state.currentPage,
@@ -133,10 +165,13 @@ class ProductNotifier extends StateNotifier<ProductState> {
 
       if (result.isSuccess) {
         final paginatedResult = result.data!;
-        final newProducts = refresh 
+        final newProducts = refresh
             ? paginatedResult.items
             : [...state.products, ...paginatedResult.items];
 
+        print(
+          '✅ ProductNotifier: Products loaded successfully: ${newProducts.length} products',
+        );
         state = state.copyWith(
           products: newProducts,
           isLoading: false,
@@ -144,12 +179,16 @@ class ProductNotifier extends StateNotifier<ProductState> {
           currentPage: paginatedResult.currentPage,
         );
       } else {
+        print(
+          '❌ ProductNotifier: Products loading failed: ${result.failure?.message}',
+        );
         state = state.copyWith(
           isLoading: false,
           error: result.failure?.message ?? 'Failed to load products',
         );
       }
     } catch (e) {
+      print('❌ ProductNotifier: Products loading error: $e');
       state = state.copyWith(
         isLoading: false,
         error: 'Failed to load products: $e',
@@ -196,37 +235,43 @@ class ProductNotifier extends StateNotifier<ProductState> {
 
   /// Search products
   Future<void> searchProducts(String query) async {
+    print('🔍 ProductNotifier: searchProducts called with query: "$query"');
+
     if (query.trim().isEmpty) {
+      print('🔍 ProductNotifier: Empty query, clearing search results');
       state = state.copyWith(searchResults: []);
       return;
     }
 
+    print('🔍 ProductNotifier: Starting search...');
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       final result = await _searchProductsUseCase(query: query.trim());
 
       if (result.isSuccess) {
-        state = state.copyWith(
-          searchResults: result.data!,
-          isLoading: false,
+        print(
+          '🔍 ProductNotifier: Search successful, found ${result.data!.length} products',
         );
+        state = state.copyWith(searchResults: result.data!, isLoading: false);
       } else {
+        print('🔍 ProductNotifier: Search failed: ${result.failure?.message}');
         state = state.copyWith(
           isLoading: false,
           error: result.failure?.message ?? 'Search failed',
         );
       }
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'Search failed: $e',
-      );
+      print('🔍 ProductNotifier: Search error: $e');
+      state = state.copyWith(isLoading: false, error: 'Search failed: $e');
     }
   }
 
   /// Apply filter
   Future<void> applyFilter(ProductFilter filter) async {
+    print('🔍 ProductNotifier: applyFilter called with filter: $filter');
+    print('🔍 ProductNotifier: Category IDs: ${filter.categoryIds}');
+
     state = state.copyWith(
       currentFilter: filter,
       currentPage: 1,
@@ -248,10 +293,7 @@ class ProductNotifier extends StateNotifier<ProductState> {
       final result = await _repository.getById(productId);
 
       if (result.isSuccess) {
-        state = state.copyWith(
-          selectedProduct: result.data!,
-          isLoading: false,
-        );
+        state = state.copyWith(selectedProduct: result.data!, isLoading: false);
       } else {
         state = state.copyWith(
           isLoading: false,
@@ -323,22 +365,30 @@ final searchProductsUseCaseProvider = Provider<SearchProductsUseCase>((ref) {
   return SearchProductsUseCase(repository);
 });
 
-final getFeaturedProductsUseCaseProvider = Provider<GetFeaturedProductsUseCase>((ref) {
-  final repository = ref.watch(productRepositoryProvider);
-  return GetFeaturedProductsUseCase(repository);
-});
+final getFeaturedProductsUseCaseProvider = Provider<GetFeaturedProductsUseCase>(
+  (ref) {
+    final repository = ref.watch(productRepositoryProvider);
+    return GetFeaturedProductsUseCase(repository);
+  },
+);
 
-final getFreshProductsUseCaseProvider = Provider<GetFreshProductsUseCase>((ref) {
+final getFreshProductsUseCaseProvider = Provider<GetFreshProductsUseCase>((
+  ref,
+) {
   final repository = ref.watch(productRepositoryProvider);
   return GetFreshProductsUseCase(repository);
 });
 
 /// Product state provider
-final productProvider = StateNotifierProvider<ProductNotifier, ProductState>((ref) {
+final productProvider = StateNotifierProvider<ProductNotifier, ProductState>((
+  ref,
+) {
   final repository = ref.watch(productRepositoryProvider);
   final getProductsUseCase = ref.watch(getProductsUseCaseProvider);
   final searchProductsUseCase = ref.watch(searchProductsUseCaseProvider);
-  final getFeaturedProductsUseCase = ref.watch(getFeaturedProductsUseCaseProvider);
+  final getFeaturedProductsUseCase = ref.watch(
+    getFeaturedProductsUseCaseProvider,
+  );
   final getFreshProductsUseCase = ref.watch(getFreshProductsUseCaseProvider);
 
   return ProductNotifier(

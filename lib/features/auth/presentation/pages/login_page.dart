@@ -6,7 +6,6 @@ import '../providers/auth_provider.dart';
 import '../widgets/auth_text_field.dart';
 import '../widgets/auth_button.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../../shared/widgets/loading_widget.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -35,7 +34,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     // Listen to auth state changes
     ref.listen<AuthState>(authProvider, (previous, next) {
-      if (next.error != null) {
+      // Handle authentication success
+      if (next.isAuthenticated &&
+          !next.isLoading &&
+          previous?.isAuthenticated != true) {
+        // User just got authenticated, navigate to home
+        context.go('/home');
+        return;
+      }
+
+      // Handle authentication errors - only show NEW errors
+      if (next.error != null &&
+          !next.isLoading &&
+          !next.isAuthenticated &&
+          next.error != previous?.error) {
+        // Only show error if:
+        // 1. There is an error
+        // 2. Not currently loading
+        // 3. User is not authenticated (don't show errors for authenticated users)
+        // 4. This is a NEW error (different from previous error)
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.error!),
@@ -57,11 +74,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 SizedBox(height: 60.h),
 
                 // App Logo and Title
-                Icon(
-                  Icons.agriculture,
-                  size: 80.w,
-                  color: theme.colorScheme.primary,
-                ),
+                Icon(Icons.eco, size: 80.w, color: theme.colorScheme.primary),
                 SizedBox(height: 16.h),
 
                 Text(
@@ -108,6 +121,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   keyboardType: TextInputType.emailAddress,
                   prefixIcon: Icons.email_outlined,
                   validator: _validateEmail,
+                  onChanged: (_) {
+                    // Clear any previous errors when user starts typing
+                    ref.read(authProvider.notifier).clearError();
+                  },
                 ),
                 SizedBox(height: 16.h),
 
@@ -120,7 +137,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   prefixIcon: Icons.lock_outline,
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                      _obscurePassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                     ),
                     onPressed: () {
                       setState(() {
@@ -129,6 +148,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     },
                   ),
                   validator: _validatePassword,
+                  onChanged: (_) {
+                    // Clear any previous errors when user starts typing
+                    ref.read(authProvider.notifier).clearError();
+                  },
                 ),
                 SizedBox(height: 8.h),
 
@@ -165,7 +188,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       child: Text(
                         'OR',
                         style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                       ),
                     ),
@@ -225,15 +250,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   Future<void> _signIn() async {
     if (_formKey.currentState?.validate() ?? false) {
-      final result = await ref.read(authProvider.notifier).signIn(
+      // Clear any previous errors before attempting login
+      ref.read(authProvider.notifier).clearError();
+
+      // Just call the sign in method
+      // Navigation will be handled by the auth state listener
+      await ref
+          .read(authProvider.notifier)
+          .signIn(
             email: _emailController.text.trim(),
             password: _passwordController.text,
           );
 
-      if (result.isSuccess && mounted) {
-        // Navigate to home or dashboard
-        context.go('/home');
-      }
+      // Note: Success navigation is handled by the auth state listener above
+      // Error handling is also handled by the auth state listener
     }
   }
 }

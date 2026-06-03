@@ -3,8 +3,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/utils/helpers.dart';
 import '../../../../shared/widgets/loading_widget.dart';
-import '../../../../shared/widgets/quantity_selector.dart';
 
 class ProductCard extends StatelessWidget {
   final ProductEntity product;
@@ -52,85 +52,115 @@ class ProductCard extends StatelessWidget {
         Expanded(
           flex: 2,
           child: Padding(
-            padding: EdgeInsets.all(12.w),
+            padding: EdgeInsets.all(8.w),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 // Product Name
-                Text(
-                  product.name,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
+                Flexible(
+                  child: Text(
+                    product.name,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12.sp,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
-                SizedBox(height: 4.h),
+                SizedBox(height: 2.h),
 
                 // Price and Unit
-                Row(
-                  children: [
-                    if (product.hasDiscount) ...[
-                      Text(
-                        '\$${product.price.toStringAsFixed(2)}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          decoration: TextDecoration.lineThrough,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.6,
+                Flexible(
+                  child: Row(
+                    children: [
+                      if (product.hasDiscount) ...[
+                        Flexible(
+                          child: Text(
+                            Helpers.formatCurrency(product.price),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              decoration: TextDecoration.lineThrough,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.6,
+                              ),
+                              fontSize: 10.sp,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                      ),
-                      SizedBox(width: 4.w),
-                    ],
-                    Text(
-                      '\$${product.effectivePrice.toStringAsFixed(2)}',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: product.hasDiscount
-                            ? theme.colorScheme.error
-                            : theme.colorScheme.primary,
-                      ),
-                    ),
-                    Text(
-                      '/${product.unit}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.7,
+                        SizedBox(width: 2.w),
+                      ],
+                      Flexible(
+                        child: Text(
+                          Helpers.formatCurrency(product.effectivePrice),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: product.hasDiscount
+                                ? theme.colorScheme.error
+                                : theme.colorScheme.primary,
+                            fontSize: 12.sp,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                    ),
-                  ],
+                      Flexible(
+                        child: Text(
+                          '/${product.unit}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.7,
+                            ),
+                            fontSize: 10.sp,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                SizedBox(height: 4.h),
+                SizedBox(height: 2.h),
 
                 // Rating and Availability
-                Row(
-                  children: [
-                    Icon(Icons.star, size: 14.w, color: Colors.amber),
-                    SizedBox(width: 2.w),
-                    Text(
-                      product.rating.toStringAsFixed(1),
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    const Spacer(),
-                    if (!product.isAvailable)
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 6.w,
-                          vertical: 2.h,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.error.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4.r),
-                        ),
+                Flexible(
+                  child: Row(
+                    children: [
+                      Icon(Icons.star, size: 12.w, color: Colors.amber),
+                      SizedBox(width: 2.w),
+                      Flexible(
                         child: Text(
-                          'Out of Stock',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: theme.colorScheme.error,
+                          product.rating.toStringAsFixed(1),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontSize: 10.sp,
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                  ],
+                      const Spacer(),
+                      if (!product.isAvailable)
+                        Flexible(
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 4.w,
+                              vertical: 1.h,
+                            ),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.error.withValues(
+                                alpha: 0.1,
+                              ),
+                              borderRadius: BorderRadius.circular(4.r),
+                            ),
+                            child: Text(
+                              'Out of Stock',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.error,
+                                fontSize: 8.sp,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -192,7 +222,7 @@ class ProductCard extends StatelessWidget {
                       children: [
                         if (product.hasDiscount)
                           Text(
-                            '\$${product.price.toStringAsFixed(2)}',
+                            Helpers.formatCurrency(product.price),
                             style: theme.textTheme.bodySmall?.copyWith(
                               decoration: TextDecoration.lineThrough,
                               color: theme.colorScheme.onSurface.withValues(
@@ -203,7 +233,7 @@ class ProductCard extends StatelessWidget {
                         Row(
                           children: [
                             Text(
-                              '\$${product.effectivePrice.toStringAsFixed(2)}',
+                              Helpers.formatCurrency(product.effectivePrice),
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: product.hasDiscount

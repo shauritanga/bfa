@@ -105,6 +105,24 @@ class ProductFilter extends Equatable {
         harvestDateTo != null;
   }
 
+  /// Check if filter has active criteria excluding category filters
+  /// (used for showing filter chips when category selection is handled separately)
+  bool get hasActiveFiltersExcludingCategory {
+    return searchQuery != null ||
+        farmerIds.isNotEmpty ||
+        minPrice != null ||
+        maxPrice != null ||
+        isOrganic != null ||
+        isFeatured != null ||
+        isAvailable != null ||
+        isFresh != null ||
+        tags.isNotEmpty ||
+        location != null ||
+        maxDistance != null ||
+        harvestDateFrom != null ||
+        harvestDateTo != null;
+  }
+
   /// Create a copy with updated fields
   ProductFilter copyWith({
     String? searchQuery,

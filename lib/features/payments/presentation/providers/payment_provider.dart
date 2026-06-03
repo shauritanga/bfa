@@ -51,7 +51,6 @@ class PaymentState {
 
 /// Payment provider
 class PaymentNotifier extends StateNotifier<PaymentState> {
-  final PaymentRepository _repository;
   final InitiatePaymentUseCase _initiatePaymentUseCase;
   final CheckPaymentStatusUseCase _checkPaymentStatusUseCase;
   final GetPaymentByOrderIdUseCase _getPaymentByOrderIdUseCase;
@@ -62,10 +61,8 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
   final GetSupportedPaymentMethodsUseCase _getSupportedPaymentMethodsUseCase;
   final ValidatePhoneNumberUseCase _validatePhoneNumberUseCase;
   final GetPaymentFeesUseCase _getPaymentFeesUseCase;
-  final UpdatePaymentStatusUseCase _updatePaymentStatusUseCase;
 
   PaymentNotifier(
-    this._repository,
     this._initiatePaymentUseCase,
     this._checkPaymentStatusUseCase,
     this._getPaymentByOrderIdUseCase,
@@ -76,7 +73,6 @@ class PaymentNotifier extends StateNotifier<PaymentState> {
     this._getSupportedPaymentMethodsUseCase,
     this._validatePhoneNumberUseCase,
     this._getPaymentFeesUseCase,
-    this._updatePaymentStatusUseCase,
   ) : super(const PaymentState());
 
   /// Initialize payment methods
@@ -405,7 +401,6 @@ final paymentProvider = StateNotifierProvider<PaymentNotifier, PaymentState>((
   ref,
 ) {
   return PaymentNotifier(
-    ref.read(paymentRepositoryProvider),
     ref.read(initiatePaymentUseCaseProvider),
     ref.read(checkPaymentStatusUseCaseProvider),
     ref.read(getPaymentByOrderIdUseCaseProvider),
@@ -416,6 +411,5 @@ final paymentProvider = StateNotifierProvider<PaymentNotifier, PaymentState>((
     ref.read(getSupportedPaymentMethodsUseCaseProvider),
     ref.read(validatePhoneNumberUseCaseProvider),
     ref.read(getPaymentFeesUseCaseProvider),
-    ref.read(updatePaymentStatusUseCaseProvider),
   );
 });

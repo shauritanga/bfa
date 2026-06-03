@@ -1,14 +1,12 @@
-import 'package:flutter/material.dart';
-
-/// App-wide constants for the Crops Ecommerce application
+/// App-wide constants for the Best Farmers application
 class AppConstants {
   // App Information
-  static const String appName = 'FreshCrops';
+  static const String appName = 'Best Farmers';
   static const String appVersion = '1.0.0';
-  static const String appDescription = 'Fresh crops direct from farmers';
+  static const String appDescription = 'Connecting you with the best farmers';
 
   // API Configuration
-  static const String baseUrl = 'https://api.freshcrops.com';
+  static const String baseUrl = 'https://api.bestfarmers.com';
   static const String clickPesaBaseUrl = 'https://api.clickpesa.com';
   static const Duration requestTimeout = Duration(seconds: 30);
   static const Duration connectTimeout = Duration(seconds: 15);
@@ -49,7 +47,12 @@ class AppConstants {
   static const double maxImageSizeMB = 5.0;
   static const int maxImageWidth = 1920;
   static const int maxImageHeight = 1080;
-  static const List<String> allowedImageFormats = ['jpg', 'jpeg', 'png', 'webp'];
+  static const List<String> allowedImageFormats = [
+    'jpg',
+    'jpeg',
+    'png',
+    'webp',
+  ];
 
   // Animation Durations
   static const Duration shortAnimationDuration = Duration(milliseconds: 200);
@@ -75,10 +78,14 @@ class AppConstants {
   static const double desktopBreakpoint = 1440;
 
   // Error Messages
-  static const String networkErrorMessage = 'Please check your internet connection';
-  static const String serverErrorMessage = 'Something went wrong. Please try again';
-  static const String authErrorMessage = 'Authentication failed. Please login again';
-  static const String validationErrorMessage = 'Please check your input and try again';
+  static const String networkErrorMessage =
+      'Please check your internet connection';
+  static const String serverErrorMessage =
+      'Something went wrong. Please try again';
+  static const String authErrorMessage =
+      'Authentication failed. Please login again';
+  static const String validationErrorMessage =
+      'Please check your input and try again';
 
   // Success Messages
   static const String loginSuccessMessage = 'Welcome back!';

@@ -14,11 +14,11 @@ import 'package:bfa/core/constants/app_constants.dart';
 void main() {
   group('App Constants Tests', () {
     test('App constants are properly defined', () {
-      expect(AppConstants.appName, equals('FreshCrops'));
+      expect(AppConstants.appName, equals('Best Farmers'));
       expect(AppConstants.appVersion, equals('1.0.0'));
       expect(
         AppConstants.appDescription,
-        equals('Fresh crops direct from farmers'),
+        equals('Connecting you with the best farmers'),
       );
     });
   });

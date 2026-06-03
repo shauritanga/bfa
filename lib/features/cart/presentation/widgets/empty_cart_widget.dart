@@ -3,7 +3,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 
 class EmptyCartWidget extends StatelessWidget {
-  const EmptyCartWidget({super.key});
+  final bool wasRecentlyCleared;
+
+  const EmptyCartWidget({super.key, this.wasRecentlyCleared = false});
 
   @override
   Widget build(BuildContext context) {
@@ -20,23 +22,33 @@ class EmptyCartWidget extends StatelessWidget {
               width: 120.w,
               height: 120.h,
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
+                color: wasRecentlyCleared
+                    ? Colors.green.withValues(alpha: 0.1)
+                    : theme.colorScheme.surfaceContainerHighest,
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                Icons.shopping_cart_outlined,
+                wasRecentlyCleared
+                    ? Icons.check_circle_outline
+                    : Icons.shopping_cart_outlined,
                 size: 60.w,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                color: wasRecentlyCleared
+                    ? Colors.green
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
               ),
             ),
             SizedBox(height: 24.h),
 
             // Title
             Text(
-              'Your cart is empty',
+              wasRecentlyCleared
+                  ? 'Order placed successfully!'
+                  : 'Your cart is empty',
               style: theme.textTheme.headlineSmall?.copyWith(
                 fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                color: wasRecentlyCleared
+                    ? Colors.green
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.8),
               ),
               textAlign: TextAlign.center,
             ),
@@ -44,7 +56,9 @@ class EmptyCartWidget extends StatelessWidget {
 
             // Description
             Text(
-              'Looks like you haven\'t added any fresh produce to your cart yet. Start shopping to fill it up!',
+              wasRecentlyCleared
+                  ? 'Your cart has been cleared and items moved to your orders. You can track your order progress in the orders section.'
+                  : 'Looks like you haven\'t added any fresh produce to your cart yet. Start shopping to fill it up!',
               style: theme.textTheme.bodyLarge?.copyWith(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
@@ -55,26 +69,40 @@ class EmptyCartWidget extends StatelessWidget {
             // Action Buttons
             Column(
               children: [
-                // Browse Products Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 48.h,
-                  child: ElevatedButton(
-                    onPressed: () => context.push('/products'),
-                    child: const Text('Browse Products'),
+                if (wasRecentlyCleared) ...[
+                  // View Orders Button (primary action when cart was cleared)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48.h,
+                    child: ElevatedButton.icon(
+                      onPressed: () => context.go('/profile/orders'),
+                      icon: const Icon(Icons.list_alt),
+                      label: const Text('View My Orders'),
+                    ),
                   ),
-                ),
-                SizedBox(height: 12.h),
+                  SizedBox(height: 12.h),
 
-                // Browse Categories Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 48.h,
-                  child: OutlinedButton(
-                    onPressed: () => context.push('/categories'),
-                    child: const Text('Browse Categories'),
+                  // Continue Shopping Button (secondary action)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48.h,
+                    child: OutlinedButton.icon(
+                      onPressed: () => context.push('/products'),
+                      icon: const Icon(Icons.shopping_bag_outlined),
+                      label: const Text('Continue Shopping'),
+                    ),
                   ),
-                ),
+                ] else ...[
+                  // Browse Products Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48.h,
+                    child: ElevatedButton(
+                      onPressed: () => context.push('/products'),
+                      child: const Text('Browse Products'),
+                    ),
+                  ),
+                ],
               ],
             ),
             SizedBox(height: 24.h),

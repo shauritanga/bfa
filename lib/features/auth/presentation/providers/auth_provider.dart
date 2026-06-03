@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../domain/entities/user_entity.dart';
 import '../../../../core/services/auth_service.dart';
 import '../../../../core/utils/result.dart';
+import '../../../../core/errors/failures.dart';
 
 /// Authentication state
 class AuthState {
@@ -37,36 +38,152 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthService _authService;
 
-  AuthNotifier(this._authService) : super(const AuthState()) {
+  AuthNotifier(this._authService) : super(const AuthState(isLoading: true)) {
     _init();
   }
 
-  void _init() {
-    // Listen to auth state changes
-    _authService.authStateChanges.listen((User? user) async {
-      if (user != null) {
-        // User is signed in, get user entity
+  void _init() async {
+    try {
+      // Set initial loading state
+      state = state.copyWith(isLoading: true);
+
+      // Check current auth state immediately
+      final currentUser = _authService.currentUser;
+
+      if (currentUser != null) {
+        // User is already signed in, get user entity
         final userEntity = await _authService.getCurrentUserEntity();
         if (userEntity.isSuccess) {
           state = state.copyWith(
             user: userEntity.data,
             isAuthenticated: true,
+            isLoading: false,
             error: null,
           );
         } else {
           state = state.copyWith(
             user: null,
             isAuthenticated: false,
+            isLoading: false,
             error: userEntity.failure?.message,
           );
         }
       } else {
-        // User is signed out
+        // No user signed in
         state = state.copyWith(
           user: null,
           isAuthenticated: false,
+          isLoading: false,
           error: null,
         );
+      }
+    } catch (e) {
+      // Handle any unexpected errors during initialization
+      state = state.copyWith(
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: 'Initialization error: ${e.toString()}',
+      );
+    }
+
+    // Listen to auth state changes for future updates
+    _authService.authStateChanges.listen((User? user) async {
+      try {
+        if (user != null) {
+          // User is signed in, get user entity
+          print('Auth state changed: User signed in (${user.uid})');
+          final userEntity = await _authService.getCurrentUserEntity();
+          if (userEntity.isSuccess) {
+            print('User entity retrieved successfully');
+            state = state.copyWith(
+              user: userEntity.data,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null, // Clear any previous errors
+            );
+          } else {
+            print('Failed to get user entity: ${userEntity.failure?.message}');
+            print(
+              'User is still authenticated in Firebase Auth, creating basic user entity',
+            );
+
+            // User is authenticated in Firebase Auth but Firestore data retrieval failed
+            // This is NOT an authentication error - create a basic user entity
+            final basicUserEntity = UserEntity(
+              id: user.uid,
+              email: user.email ?? '',
+              firstName: '',
+              lastName: '',
+              isEmailVerified: user.emailVerified,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
+
+            state = state.copyWith(
+              user: basicUserEntity,
+              isAuthenticated: true,
+              isLoading: false,
+              error:
+                  null, // IMPORTANT: Don't show error if user is authenticated
+            );
+
+            print(
+              'Successfully created basic user entity for authenticated user',
+            );
+          }
+        } else {
+          // User is signed out
+          print('Auth state changed: User signed out');
+          state = state.copyWith(
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+            error: null,
+          );
+        }
+      } catch (e) {
+        print('Error in auth state listener: $e');
+        print(
+          'User is ${user != null ? 'authenticated' : 'not authenticated'}',
+        );
+
+        if (user == null) {
+          // User is not authenticated, this is a real auth error
+          state = state.copyWith(
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+            error: 'Authentication error: ${e.toString()}',
+          );
+        } else {
+          // User IS authenticated in Firebase Auth, but there was an error getting Firestore data
+          // This is NOT an authentication error - just a data retrieval issue
+          print(
+            'User is authenticated but Firestore data retrieval failed. Creating basic user entity.',
+          );
+
+          final basicUserEntity = UserEntity(
+            id: user.uid,
+            email: user.email ?? '',
+            firstName: '',
+            lastName: '',
+            isEmailVerified: user.emailVerified,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
+
+          state = state.copyWith(
+            user: basicUserEntity,
+            isAuthenticated: true,
+            isLoading: false,
+            error: null, // IMPORTANT: Don't show error if user is authenticated
+          );
+
+          print(
+            'Successfully created basic user entity for authenticated user',
+          );
+        }
       }
     });
   }
@@ -76,6 +193,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String email,
     required String password,
   }) async {
+    // Clear any previous errors and set loading state
     state = state.copyWith(isLoading: true, error: null);
 
     final result = await _authService.signInWithEmailAndPassword(
@@ -83,19 +201,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
       password: password,
     );
 
-    if (result.isSuccess) {
-      state = state.copyWith(
-        user: result.data,
-        isAuthenticated: true,
-        isLoading: false,
-        error: null,
-      );
-    } else {
-      state = state.copyWith(
-        isLoading: false,
-        error: result.failure?.message,
-      );
+    // Don't update state here for success - let the auth state listener handle it
+    // This prevents race conditions between direct updates and listener updates
+    if (result.isFailure) {
+      // Only update state for failures, success will be handled by auth state listener
+      state = state.copyWith(isLoading: false, error: result.failure?.message);
     }
+    // Note: For success, the auth state listener will automatically update the state
+    // when Firebase Auth state changes, including clearing any errors
 
     return result;
   }
@@ -107,32 +220,47 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String firstName,
     required String lastName,
     String? phoneNumber,
+    String? address,
   }) async {
-    state = state.copyWith(isLoading: true, error: null);
+    try {
+      print('=== AUTH PROVIDER SIGNUP ===');
+      print('Email: $email');
+      print('First Name: $firstName');
+      print('Last Name: $lastName');
+      print('Phone Number: $phoneNumber');
+      print('Address: $address');
+      print('=== CALLING AUTH SERVICE ===');
 
-    final result = await _authService.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-      firstName: firstName,
-      lastName: lastName,
-      phoneNumber: phoneNumber,
-    );
+      state = state.copyWith(isLoading: true, error: null);
 
-    if (result.isSuccess) {
-      state = state.copyWith(
-        user: result.data,
-        isAuthenticated: true,
-        isLoading: false,
-        error: null,
+      final result = await _authService.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+        firstName: firstName,
+        lastName: lastName,
+        phoneNumber: phoneNumber,
+        address: address,
       );
-    } else {
-      state = state.copyWith(
-        isLoading: false,
-        error: result.failure?.message,
-      );
+
+      // Don't update state here for success - let the auth state listener handle it
+      // This prevents race conditions between direct updates and listener updates
+      if (result.isFailure) {
+        // Only update state for failures, success will be handled by auth state listener
+        state = state.copyWith(
+          isLoading: false,
+          error: result.failure?.message,
+        );
+      }
+      // Note: For success, the auth state listener will automatically update the state
+      // when Firebase Auth state changes
+
+      return result;
+    } catch (e) {
+      // Handle any unexpected errors during registration
+      final errorMessage = 'Registration error: ${e.toString()}';
+      state = state.copyWith(isLoading: false, error: errorMessage);
+      return Result.failure(UnknownFailure(message: errorMessage));
     }
-
-    return result;
   }
 
   /// Sign out
@@ -149,10 +277,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         error: null,
       );
     } else {
-      state = state.copyWith(
-        isLoading: false,
-        error: result.failure?.message,
-      );
+      state = state.copyWith(isLoading: false, error: result.failure?.message);
     }
 
     return result;
@@ -214,10 +339,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
       }
     } else {
-      state = state.copyWith(
-        isLoading: false,
-        error: result.failure?.message,
-      );
+      state = state.copyWith(isLoading: false, error: result.failure?.message);
     }
 
     return result;
@@ -257,10 +379,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         error: null,
       );
     } else {
-      state = state.copyWith(
-        isLoading: false,
-        error: result.failure?.message,
-      );
+      state = state.copyWith(isLoading: false, error: result.failure?.message);
     }
 
     return result;

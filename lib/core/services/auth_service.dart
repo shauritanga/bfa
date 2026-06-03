@@ -15,8 +15,33 @@ class AuthService {
   final FirebaseAuth _auth = FirebaseConfig.instance.auth;
   final FirebaseFirestore _firestore = FirebaseConfig.instance.firestore;
 
+  // Prevent concurrent auth operations that can cause PigeonUserDetails errors
+  bool _isAuthOperationInProgress = false;
+
+  // Retry mechanism for PigeonUserDetails errors
+  static const int _maxRetries = 3;
+  static const Duration _retryDelay = Duration(milliseconds: 500);
+
   /// Get current user
   User? get currentUser => _auth.currentUser;
+
+  /// Retry mechanism for operations that might encounter PigeonUserDetails errors
+  Future<T> _retryOnPigeonError<T>(Future<T> Function() operation) async {
+    for (int attempt = 1; attempt <= _maxRetries; attempt++) {
+      try {
+        return await operation();
+      } catch (e) {
+        if (e.toString().contains('PigeonUserDetails') &&
+            attempt < _maxRetries) {
+          print('PigeonUserDetails error on attempt $attempt, retrying...');
+          await Future.delayed(_retryDelay);
+          continue;
+        }
+        rethrow; // Re-throw if not a PigeonUserDetails error or max retries reached
+      }
+    }
+    throw Exception('Max retries reached for PigeonUserDetails error');
+  }
 
   /// Check if user is signed in
   bool get isSignedIn => currentUser != null;
@@ -50,22 +75,43 @@ class AuthService {
     required String password,
   }) async {
     try {
+      print('Starting sign in process for email: $email');
+
       final credential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
 
+      print('Firebase Auth sign in successful');
+
       if (credential.user != null) {
+        print('User credential received, getting user entity...');
         final userEntity = await _getUserEntity(credential.user!);
+        print('User entity created successfully');
         return Result.success(userEntity);
       } else {
+        print('ERROR: No user returned from Firebase Auth');
         return const Result.failure(
           AuthFailure(message: 'Sign in failed: No user returned'),
         );
       }
     } on FirebaseAuthException catch (e) {
+      print('Firebase Auth Exception: ${e.code} - ${e.message}');
       return Result.failure(AuthFailure(message: _getAuthErrorMessage(e)));
     } catch (e) {
+      print('Unexpected error during sign in: $e');
+      print('Error type: ${e.runtimeType}');
+
+      // Handle specific PigeonUserDetails error
+      if (e.toString().contains('PigeonUserDetails')) {
+        print('Detected PigeonUserDetails error - attempting recovery');
+        return Result.failure(
+          AuthFailure(
+            message: 'Authentication service error. Please try again.',
+          ),
+        );
+      }
+
       return Result.failure(
         UnknownFailure(message: 'Unexpected error during sign in: $e'),
       );
@@ -79,12 +125,29 @@ class AuthService {
     required String firstName,
     required String lastName,
     String? phoneNumber,
+    String? address,
   }) async {
+    // Prevent concurrent auth operations
+    if (_isAuthOperationInProgress) {
+      return const Result.failure(
+        AuthFailure(
+          message:
+              'Another authentication operation is in progress. Please wait.',
+        ),
+      );
+    }
+
+    _isAuthOperationInProgress = true;
+
     try {
+      print('Starting user registration for email: $email');
+
       final credential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
+
+      print('Firebase Auth registration successful');
 
       if (credential.user != null) {
         // Update display name
@@ -99,14 +162,39 @@ class AuthService {
           phoneNumber: phoneNumber,
           profileImageUrl: null,
           isEmailVerified: credential.user!.emailVerified,
+          address: address != null && address.isNotEmpty
+              ? Address(
+                  street: address,
+                  city: '', // Will be filled later when user updates profile
+                  region: '',
+                  postalCode: '',
+                  country: 'Tanzania',
+                )
+              : null,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
 
-        await _createUserDocument(userEntity);
+        try {
+          await _createUserDocument(userEntity);
+          print('User document created successfully');
+
+          // Verify the document was actually saved
+          await _verifyUserDocumentCreated(userEntity.id);
+        } catch (e) {
+          print('Failed to create user document: $e');
+          // Continue with the process even if Firestore fails
+          // The user account is still created in Firebase Auth
+        }
 
         // Send email verification
-        await sendEmailVerification();
+        try {
+          await sendEmailVerification();
+          print('Email verification sent successfully');
+        } catch (e) {
+          print('Failed to send email verification: $e');
+          // Continue with the process even if email verification fails
+        }
 
         return Result.success(userEntity);
       } else {
@@ -115,11 +203,30 @@ class AuthService {
         );
       }
     } on FirebaseAuthException catch (e) {
+      print(
+        'Firebase Auth Exception during registration: ${e.code} - ${e.message}',
+      );
       return Result.failure(AuthFailure(message: _getAuthErrorMessage(e)));
     } catch (e) {
+      print('Unexpected error during account creation: $e');
+      print('Error type: ${e.runtimeType}');
+
+      // Handle specific PigeonUserDetails error
+      if (e.toString().contains('PigeonUserDetails')) {
+        print(
+          'Detected PigeonUserDetails error during registration - attempting recovery',
+        );
+        return Result.failure(
+          AuthFailure(message: 'Registration service error. Please try again.'),
+        );
+      }
+
       return Result.failure(
         UnknownFailure(message: 'Unexpected error during account creation: $e'),
       );
+    } finally {
+      // Always reset the operation flag
+      _isAuthOperationInProgress = false;
     }
   }
 
@@ -294,20 +401,72 @@ class AuthService {
   /// Get user entity from Firebase user
   Future<UserEntity> _getUserEntity(User user) async {
     try {
+      print('Getting user entity for user: ${user.uid}');
+
       final doc = await _firestore
           .collection(FirebaseCollections.users)
           .doc(user.uid)
           .get();
 
       if (doc.exists) {
-        return UserEntity.fromMap(doc.data()!);
+        print('User document found, parsing data...');
+        final data = doc.data()!;
+        print('User document data: $data');
+
+        try {
+          final userEntity = UserEntity.fromMap(data);
+          print('User entity created successfully from Firestore data');
+          return userEntity;
+        } catch (e) {
+          print('Error parsing user entity from Firestore data: $e');
+          print('Attempting to preserve existing Firestore data...');
+
+          // Try to preserve as much existing Firestore data as possible
+          // instead of completely falling back to Firebase Auth data
+          try {
+            final displayNameParts = _parseDisplayName(user.displayName);
+            return UserEntity(
+              id: user.uid,
+              email: user.email ?? data['email'] ?? '',
+              // Preserve existing firstName/lastName from Firestore if available
+              firstName:
+                  data['firstName'] ?? displayNameParts['firstName'] ?? '',
+              lastName: data['lastName'] ?? displayNameParts['lastName'] ?? '',
+              // Preserve existing phoneNumber from Firestore if available
+              phoneNumber: data['phoneNumber'] ?? user.phoneNumber,
+              profileImageUrl: data['profileImageUrl'] ?? user.photoURL,
+              isEmailVerified: user.emailVerified,
+              // Preserve existing address from Firestore if available
+              address: data['address'] != null
+                  ? Address.fromMap(data['address'] as Map<String, dynamic>)
+                  : null,
+              createdAt: data['createdAt'] != null
+                  ? DateTime.parse(data['createdAt'])
+                  : DateTime.now(),
+              updatedAt: DateTime.now(), // Always update the timestamp
+            );
+          } catch (fallbackError) {
+            print('Fallback parsing also failed: $fallbackError');
+            // Last resort: create minimal user entity
+            return UserEntity(
+              id: user.uid,
+              email: user.email ?? '',
+              firstName: '',
+              lastName: '',
+              isEmailVerified: user.emailVerified,
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
+          }
+        }
       } else {
         // Create user document if it doesn't exist
+        final displayNameParts = _parseDisplayName(user.displayName);
         final userEntity = UserEntity(
           id: user.uid,
           email: user.email ?? '',
-          firstName: user.displayName?.split(' ').first ?? '',
-          lastName: user.displayName?.split(' ').skip(1).join(' ') ?? '',
+          firstName: displayNameParts['firstName'] ?? '',
+          lastName: displayNameParts['lastName'] ?? '',
           phoneNumber: user.phoneNumber,
           profileImageUrl: user.photoURL,
           isEmailVerified: user.emailVerified,
@@ -319,12 +478,60 @@ class AuthService {
         return userEntity;
       }
     } catch (e) {
-      // Return basic user entity if Firestore fails
+      print('Error in _getUserEntity: $e');
+      print('Error type: ${e.runtimeType}');
+
+      // Handle specific PigeonUserDetails error
+      if (e.toString().contains('PigeonUserDetails')) {
+        print('Detected PigeonUserDetails error in _getUserEntity');
+        print(
+          'Attempting to retrieve user document directly from Firestore...',
+        );
+
+        // Try to get the user document directly, bypassing the problematic code
+        try {
+          final doc = await _firestore
+              .collection(FirebaseCollections.users)
+              .doc(user.uid)
+              .get();
+
+          if (doc.exists) {
+            final data = doc.data()!;
+            print('Retrieved user document data directly: $data');
+
+            // Try to create user entity from the raw Firestore data
+            return UserEntity(
+              id: user.uid,
+              email: data['email'] ?? user.email ?? '',
+              firstName: data['firstName'] ?? '',
+              lastName: data['lastName'] ?? '',
+              phoneNumber: data['phoneNumber'],
+              profileImageUrl: data['profileImageUrl'] ?? user.photoURL,
+              isEmailVerified: user.emailVerified,
+              address: data['address'] != null
+                  ? Address.fromMap(data['address'] as Map<String, dynamic>)
+                  : null,
+              createdAt: data['createdAt'] != null
+                  ? DateTime.parse(data['createdAt'])
+                  : DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
+          }
+        } catch (directRetrievalError) {
+          print(
+            'Direct Firestore retrieval also failed: $directRetrievalError',
+          );
+        }
+      }
+
+      // Last resort: Return basic user entity from Firebase Auth data
+      print('Creating fallback user entity from Firebase Auth data');
+      final displayNameParts = _parseDisplayName(user.displayName);
       return UserEntity(
         id: user.uid,
         email: user.email ?? '',
-        firstName: user.displayName?.split(' ').first ?? '',
-        lastName: user.displayName?.split(' ').skip(1).join(' ') ?? '',
+        firstName: displayNameParts['firstName'] ?? '',
+        lastName: displayNameParts['lastName'] ?? '',
         phoneNumber: user.phoneNumber,
         profileImageUrl: user.photoURL,
         isEmailVerified: user.emailVerified,
@@ -336,10 +543,113 @@ class AuthService {
 
   /// Create user document in Firestore
   Future<void> _createUserDocument(UserEntity userEntity) async {
-    await _firestore
-        .collection(FirebaseCollections.users)
-        .doc(userEntity.id)
-        .set(userEntity.toMap());
+    try {
+      final userData = userEntity.toMap();
+
+      // Debug: Log the data being saved
+      print('=== CREATING USER DOCUMENT ===');
+      print('User ID: ${userEntity.id}');
+      print('User data being saved:');
+      userData.forEach((key, value) {
+        print('  $key: $value (${value.runtimeType})');
+      });
+
+      await _firestore
+          .collection(FirebaseCollections.users)
+          .doc(userEntity.id)
+          .set(userData);
+
+      print('✅ User document created successfully for user: ${userEntity.id}');
+      print('=== USER DOCUMENT CREATION COMPLETE ===');
+    } catch (e) {
+      print('❌ Error creating user document: $e');
+      print('Error type: ${e.runtimeType}');
+      print('Stack trace: ${StackTrace.current}');
+      rethrow; // Re-throw to maintain error handling flow
+    }
+  }
+
+  /// Verify that user document was created successfully
+  Future<void> _verifyUserDocumentCreated(String userId) async {
+    try {
+      print('=== VERIFYING USER DOCUMENT ===');
+      print('Checking document for user: $userId');
+
+      final doc = await _firestore
+          .collection(FirebaseCollections.users)
+          .doc(userId)
+          .get();
+
+      if (doc.exists) {
+        final data = doc.data();
+        print('✅ User document exists in Firestore');
+        print('Document data:');
+        data?.forEach((key, value) {
+          print('  $key: $value');
+        });
+
+        // Check if critical fields are present
+        final missingFields = <String>[];
+        if (data?['firstName'] == null || data?['firstName'] == '') {
+          missingFields.add('firstName');
+        }
+        if (data?['lastName'] == null || data?['lastName'] == '') {
+          missingFields.add('lastName');
+        }
+        if (data?['email'] == null || data?['email'] == '') {
+          missingFields.add('email');
+        }
+
+        if (missingFields.isNotEmpty) {
+          print(
+            '⚠️  WARNING: Critical fields are missing or empty: $missingFields',
+          );
+        } else {
+          print('✅ All critical fields are present and non-empty');
+        }
+
+        // Check optional fields
+        final optionalFields = ['phoneNumber', 'address'];
+        for (final field in optionalFields) {
+          if (data?[field] != null) {
+            print('✅ Optional field $field is present: ${data?[field]}');
+          } else {
+            print('ℹ️  Optional field $field is null (this is okay)');
+          }
+        }
+      } else {
+        print('❌ ERROR: User document was not created in Firestore!');
+        throw Exception(
+          'User document verification failed: Document does not exist',
+        );
+      }
+
+      print('=== USER DOCUMENT VERIFICATION COMPLETE ===');
+    } catch (e) {
+      print('Error verifying user document: $e');
+    }
+  }
+
+  /// Parse display name safely to avoid type casting errors
+  Map<String, String> _parseDisplayName(String? displayName) {
+    if (displayName == null || displayName.isEmpty) {
+      return {'firstName': '', 'lastName': ''};
+    }
+
+    try {
+      final parts = displayName.trim().split(' ');
+      if (parts.isEmpty) {
+        return {'firstName': '', 'lastName': ''};
+      }
+
+      final firstName = parts.first;
+      final lastName = parts.length > 1 ? parts.skip(1).join(' ') : '';
+
+      return {'firstName': firstName, 'lastName': lastName};
+    } catch (e) {
+      // If any error occurs during parsing, return empty strings
+      return {'firstName': '', 'lastName': ''};
+    }
   }
 
   /// Get user-friendly error message from FirebaseAuthException

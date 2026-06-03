@@ -108,45 +108,117 @@ class UserEntity extends Equatable {
 
   /// Create from map (Firestore document)
   factory UserEntity.fromMap(Map<String, dynamic> map) {
-    return UserEntity(
-      id: map['id'] ?? '',
-      email: map['email'] ?? '',
-      firstName: map['firstName'] ?? '',
-      lastName: map['lastName'] ?? '',
-      phoneNumber: map['phoneNumber'],
-      profileImageUrl: map['profileImageUrl'],
-      isEmailVerified: map['isEmailVerified'] ?? false,
-      createdAt: DateTime.parse(map['createdAt']),
-      updatedAt: DateTime.parse(map['updatedAt']),
-      role: UserRole.values.firstWhere(
-        (role) => role.name == map['role'],
-        orElse: () => UserRole.customer,
-      ),
-      status: UserStatus.values.firstWhere(
-        (status) => status.name == map['status'],
-        orElse: () => UserStatus.active,
-      ),
-      address: map['address'] != null ? Address.fromMap(map['address']) : null,
-      preferences: map['preferences'],
-    );
+    try {
+      return UserEntity(
+        id: _safeString(map['id']),
+        email: _safeString(map['email']),
+        firstName: _safeString(map['firstName']),
+        lastName: _safeString(map['lastName']),
+        phoneNumber: _safeNullableString(map['phoneNumber']),
+        profileImageUrl: _safeNullableString(map['profileImageUrl']),
+        isEmailVerified: map['isEmailVerified'] ?? false,
+        createdAt: _safeDateTime(map['createdAt']) ?? DateTime.now(),
+        updatedAt: _safeDateTime(map['updatedAt']) ?? DateTime.now(),
+        role: UserRole.values.firstWhere(
+          (role) => role.name == map['role'],
+          orElse: () => UserRole.customer,
+        ),
+        status: UserStatus.values.firstWhere(
+          (status) => status.name == map['status'],
+          orElse: () => UserStatus.active,
+        ),
+        address: _safeAddress(map['address']),
+        preferences: _safePreferences(map['preferences']),
+      );
+    } catch (e) {
+      // If parsing fails, return a basic user entity
+      return UserEntity(
+        id: _safeString(map['id']),
+        email: _safeString(map['email']),
+        firstName: _safeString(map['firstName']),
+        lastName: _safeString(map['lastName']),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+    }
+  }
+
+  /// Safely extract string from dynamic value
+  static String _safeString(dynamic value) {
+    if (value == null) return '';
+    if (value is String) return value;
+    if (value is List) return value.join(' '); // Handle list case
+    return value.toString();
+  }
+
+  /// Safely extract nullable string from dynamic value
+  static String? _safeNullableString(dynamic value) {
+    if (value == null) return null;
+    if (value is String) return value.isEmpty ? null : value;
+    if (value is List) {
+      final joined = value.join(' ');
+      return joined.isEmpty ? null : joined;
+    }
+    final stringValue = value.toString();
+    return stringValue.isEmpty ? null : stringValue;
+  }
+
+  /// Safely extract DateTime from dynamic value
+  static DateTime? _safeDateTime(dynamic value) {
+    if (value == null) return null;
+    if (value is String) {
+      try {
+        return DateTime.parse(value);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// Safely extract Address from dynamic value
+  static Address? _safeAddress(dynamic value) {
+    if (value == null) return null;
+    if (value is Map<String, dynamic>) {
+      try {
+        return Address.fromMap(value);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// Safely extract preferences from dynamic value
+  static Map<String, dynamic>? _safePreferences(dynamic value) {
+    if (value == null) return null;
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      try {
+        return Map<String, dynamic>.from(value);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
   }
 
   @override
   List<Object?> get props => [
-        id,
-        email,
-        firstName,
-        lastName,
-        phoneNumber,
-        profileImageUrl,
-        isEmailVerified,
-        createdAt,
-        updatedAt,
-        role,
-        status,
-        address,
-        preferences,
-      ];
+    id,
+    email,
+    firstName,
+    lastName,
+    phoneNumber,
+    profileImageUrl,
+    isEmailVerified,
+    createdAt,
+    updatedAt,
+    role,
+    status,
+    address,
+    preferences,
+  ];
 
   @override
   String toString() {
@@ -155,19 +227,10 @@ class UserEntity extends Equatable {
 }
 
 /// User roles in the system
-enum UserRole {
-  customer,
-  farmer,
-  admin,
-}
+enum UserRole { customer, farmer, admin }
 
 /// User status
-enum UserStatus {
-  active,
-  inactive,
-  suspended,
-  pending,
-}
+enum UserStatus { active, inactive, suspended, pending }
 
 /// Address entity
 class Address extends Equatable {
@@ -230,27 +293,68 @@ class Address extends Equatable {
 
   /// Create from map
   factory Address.fromMap(Map<String, dynamic> map) {
-    return Address(
-      street: map['street'] ?? '',
-      city: map['city'] ?? '',
-      region: map['region'] ?? '',
-      postalCode: map['postalCode'] ?? '',
-      country: map['country'] ?? 'Tanzania',
-      latitude: map['latitude']?.toDouble(),
-      longitude: map['longitude']?.toDouble(),
-    );
+    try {
+      return Address(
+        street: _safeAddressString(map['street']),
+        city: _safeAddressString(map['city']),
+        region: _safeAddressString(map['region']),
+        postalCode: _safeAddressString(map['postalCode']),
+        country: _safeAddressString(map['country'], defaultValue: 'Tanzania'),
+        latitude: _safeDouble(map['latitude']),
+        longitude: _safeDouble(map['longitude']),
+      );
+    } catch (e) {
+      // Return basic address if parsing fails
+      return const Address(
+        street: '',
+        city: '',
+        region: '',
+        postalCode: '',
+        country: 'Tanzania',
+      );
+    }
+  }
+
+  /// Safely extract string for address fields
+  static String _safeAddressString(dynamic value, {String defaultValue = ''}) {
+    if (value == null) return defaultValue;
+    if (value is String) return value;
+    if (value is List) return value.join(' '); // Handle list case
+    return value.toString();
+  }
+
+  /// Safely extract double from dynamic value
+  static double? _safeDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) {
+      try {
+        return double.parse(value);
+      } catch (e) {
+        return null;
+      }
+    }
+    if (value is List && value.isNotEmpty) {
+      try {
+        return double.parse(value.first.toString());
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
   }
 
   @override
   List<Object?> get props => [
-        street,
-        city,
-        region,
-        postalCode,
-        country,
-        latitude,
-        longitude,
-      ];
+    street,
+    city,
+    region,
+    postalCode,
+    country,
+    latitude,
+    longitude,
+  ];
 
   @override
   String toString() {
@@ -335,15 +439,15 @@ class UserPreferences extends Equatable {
 
   @override
   List<Object?> get props => [
-        notificationsEnabled,
-        emailNotifications,
-        pushNotifications,
-        smsNotifications,
-        language,
-        currency,
-        darkMode,
-        categoryPreferences,
-      ];
+    notificationsEnabled,
+    emailNotifications,
+    pushNotifications,
+    smsNotifications,
+    language,
+    currency,
+    darkMode,
+    categoryPreferences,
+  ];
 
   @override
   String toString() {

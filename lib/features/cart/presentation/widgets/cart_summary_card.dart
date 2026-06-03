@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../domain/entities/cart_entity.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/utils/helpers.dart';
 
 class CartSummaryCard extends StatefulWidget {
   final CartEntity cart;
@@ -99,7 +100,7 @@ class _CartSummaryCardState extends State<CartSummaryCard> {
                   ),
                 ),
                 Text(
-                  '\$${widget.cart.total.toStringAsFixed(2)}',
+                  Helpers.formatCurrency(widget.cart.total),
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: theme.colorScheme.primary,
@@ -121,7 +122,7 @@ class _CartSummaryCardState extends State<CartSummaryCard> {
                     ),
                   ),
                   Text(
-                    '\$${widget.cart.totalSavings.toStringAsFixed(2)}',
+                    Helpers.formatCurrency(widget.cart.totalSavings),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: Colors.green,
                       fontWeight: FontWeight.w600,
@@ -154,7 +155,7 @@ class _CartSummaryCardState extends State<CartSummaryCard> {
             ),
           ),
           Text(
-            '${isDiscount ? '-' : ''}\$${amount.abs().toStringAsFixed(2)}',
+            '${isDiscount ? '-' : ''}${Helpers.formatCurrency(amount.abs())}',
             style: theme.textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.w500,
               color: isDiscount 

@@ -64,7 +64,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    
+
     return AppBar(
       title: Text(
         title,
@@ -86,21 +86,20 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   Widget? _buildLeading(BuildContext context) {
     if (leading != null) return leading;
-    
+
     if (showBackButton && Navigator.of(context).canPop()) {
       return IconButton(
         onPressed: onBackPressed ?? () => Navigator.of(context).pop(),
         icon: const Icon(Icons.arrow_back),
       );
     }
-    
+
     return null;
   }
 
   @override
-  Size get preferredSize => Size.fromHeight(
-    kToolbarHeight + (bottom?.preferredSize.height ?? 0),
-  );
+  Size get preferredSize =>
+      Size.fromHeight(kToolbarHeight + (bottom?.preferredSize.height ?? 0));
 }
 
 /// App bar with search functionality
@@ -170,10 +169,7 @@ class _SearchAppBarState extends State<SearchAppBar> {
           onSubmitted: (_) => widget.onSearchSubmitted?.call(),
         ),
         actions: [
-          IconButton(
-            onPressed: _clearSearch,
-            icon: const Icon(Icons.clear),
-          ),
+          IconButton(onPressed: _clearSearch, icon: const Icon(Icons.clear)),
         ],
         automaticallyImplyLeading: widget.automaticallyImplyLeading,
       );
@@ -188,10 +184,7 @@ class _SearchAppBarState extends State<SearchAppBar> {
       ),
       centerTitle: true,
       actions: [
-        IconButton(
-          onPressed: _openSearch,
-          icon: const Icon(Icons.search),
-        ),
+        IconButton(onPressed: _openSearch, icon: const Icon(Icons.search)),
         ...?widget.actions,
       ],
       automaticallyImplyLeading: widget.automaticallyImplyLeading,
@@ -257,14 +250,17 @@ class TabbedAppBar extends StatelessWidget implements PreferredSizeWidget {
         tabs: tabs,
         indicatorColor: AppColors.secondary,
         labelColor: theme.appBarTheme.foregroundColor,
-        unselectedLabelColor: theme.appBarTheme.foregroundColor?.withOpacity(0.7),
+        unselectedLabelColor: theme.appBarTheme.foregroundColor?.withOpacity(
+          0.7,
+        ),
         indicatorWeight: 3.0,
       ),
     );
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight + kTextTabBarHeight);
+  Size get preferredSize =>
+      const Size.fromHeight(kToolbarHeight + kTextTabBarHeight);
 }
 
 /// App bar with profile avatar
@@ -301,14 +297,14 @@ class ProfileAppBar extends StatelessWidget implements PreferredSizeWidget {
         child: Container(
           margin: EdgeInsets.all(8.w),
           child: CircleAvatar(
-            backgroundImage: userImageUrl != null 
-                ? NetworkImage(userImageUrl!) 
+            backgroundImage: userImageUrl != null
+                ? NetworkImage(userImageUrl!)
                 : null,
             backgroundColor: AppColors.primary,
             child: userImageUrl == null
                 ? Text(
-                    userName?.isNotEmpty == true 
-                        ? userName![0].toUpperCase() 
+                    userName?.isNotEmpty == true
+                        ? userName![0].toUpperCase()
                         : 'U',
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: AppColors.onPrimary,
@@ -330,17 +326,9 @@ class ProfileAppBar extends StatelessWidget implements PreferredSizeWidget {
 /// App bar with cart icon and badge
 class ShoppingAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
-  final int cartItemCount;
-  final VoidCallback? onCartTap;
   final List<Widget>? actions;
 
-  const ShoppingAppBar({
-    super.key,
-    required this.title,
-    this.cartItemCount = 0,
-    this.onCartTap,
-    this.actions,
-  });
+  const ShoppingAppBar({super.key, required this.title, this.actions});
 
   @override
   Widget build(BuildContext context) {
@@ -351,44 +339,11 @@ class ShoppingAppBar extends StatelessWidget implements PreferredSizeWidget {
         title,
         style: theme.textTheme.titleLarge?.copyWith(
           fontWeight: FontWeight.w600,
+          color: AppColors.onPrimary,
         ),
       ),
-      centerTitle: true,
-      actions: [
-        Stack(
-          children: [
-            IconButton(
-              onPressed: onCartTap,
-              icon: const Icon(Icons.shopping_cart_outlined),
-            ),
-            if (cartItemCount > 0)
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Container(
-                  padding: EdgeInsets.all(2.w),
-                  decoration: BoxDecoration(
-                    color: AppColors.error,
-                    borderRadius: BorderRadius.circular(10.r),
-                  ),
-                  constraints: BoxConstraints(
-                    minWidth: 16.w,
-                    minHeight: 16.h,
-                  ),
-                  child: Text(
-                    cartItemCount > 99 ? '99+' : cartItemCount.toString(),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: AppColors.onError,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        ...?actions,
-      ],
+      centerTitle: false,
+      actions: [...?actions],
     );
   }
 

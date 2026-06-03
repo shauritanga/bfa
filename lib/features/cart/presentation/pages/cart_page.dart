@@ -8,6 +8,7 @@ import '../widgets/cart_summary_card.dart';
 import '../widgets/empty_cart_widget.dart';
 import '../../domain/repositories/cart_repository.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/utils/helpers.dart';
 import '../../../../shared/widgets/loading_widget.dart';
 import '../../../../shared/widgets/error_widget.dart';
 
@@ -27,6 +28,13 @@ class _CartPageState extends ConsumerState<CartPage> {
       // TODO: Get current user ID from auth provider
       const userId = 'current_user_id'; // Placeholder
       ref.read(cartProvider.notifier).setUser(userId);
+
+      // Clear the recently cleared flag after 5 seconds
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) {
+          ref.read(cartProvider.notifier).clearRecentlyClearedFlag();
+        }
+      });
     });
   }
 
@@ -38,7 +46,7 @@ class _CartPageState extends ConsumerState<CartPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Shopping Cart'),
-        centerTitle: true,
+        centerTitle: false,
         actions: [
           if (cartState.cart != null && cartState.cart!.isNotEmpty)
             IconButton(
@@ -69,7 +77,7 @@ class _CartPageState extends ConsumerState<CartPage> {
     }
 
     if (cartState.cart == null || cartState.cart!.isEmpty) {
-      return const EmptyCartWidget();
+      return EmptyCartWidget(wasRecentlyCleared: cartState.wasRecentlyCleared);
     }
 
     return RefreshIndicator(
@@ -233,7 +241,7 @@ class _CartPageState extends ConsumerState<CartPage> {
                   ),
                 ),
                 Text(
-                  '\$${cartState.total.toStringAsFixed(2)}',
+                  Helpers.formatCurrency(cartState.total),
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: theme.colorScheme.primary,
@@ -254,7 +262,7 @@ class _CartPageState extends ConsumerState<CartPage> {
                     ),
                   ),
                   Text(
-                    '\$${cartState.totalSavings.toStringAsFixed(2)}',
+                    Helpers.formatCurrency(cartState.totalSavings),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: Colors.green,
                       fontWeight: FontWeight.w600,
@@ -315,7 +323,7 @@ class _CartPageState extends ConsumerState<CartPage> {
   }
 
   void _proceedToCheckout() {
-    // TODO: Navigate to checkout page
-    context.push('/checkout');
+    // Navigate to checkout page
+    context.push('/cart/checkout');
   }
 }

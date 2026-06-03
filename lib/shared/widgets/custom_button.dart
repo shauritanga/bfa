@@ -204,7 +204,6 @@ class CustomButton extends StatelessWidget {
   }
 
   ButtonStyle _getButtonStyle(BuildContext context) {
-    final theme = Theme.of(context);
     final buttonSize = _getButtonSize();
 
     switch (type) {

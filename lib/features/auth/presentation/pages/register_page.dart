@@ -20,6 +20,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _addressController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
@@ -32,6 +33,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     _lastNameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
+    _addressController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -55,10 +57,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     });
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Account'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Create Account'), centerTitle: true),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.all(AppConstants.defaultPadding.w),
@@ -134,6 +133,18 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 ),
                 SizedBox(height: 16.h),
 
+                // Address Field
+                AuthTextField(
+                  controller: _addressController,
+                  label: 'Address (Optional)',
+                  hintText: 'Enter your address',
+                  keyboardType: TextInputType.streetAddress,
+                  prefixIcon: Icons.location_on_outlined,
+                  maxLines: 2,
+                  validator: _validateAddress,
+                ),
+                SizedBox(height: 16.h),
+
                 // Password Field
                 AuthTextField(
                   controller: _passwordController,
@@ -143,7 +154,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   prefixIcon: Icons.lock_outline,
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                      _obscurePassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                     ),
                     onPressed: () {
                       setState(() {
@@ -164,7 +177,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                   prefixIcon: Icons.lock_outline,
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscureConfirmPassword ? Icons.visibility : Icons.visibility_off,
+                      _obscureConfirmPassword
+                          ? Icons.visibility
+                          : Icons.visibility_off,
                     ),
                     onPressed: () {
                       setState(() {
@@ -219,7 +234,9 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 // Sign Up Button
                 AuthButton(
                   text: 'Create Account',
-                  onPressed: authState.isLoading || !_acceptTerms ? null : _signUp,
+                  onPressed: authState.isLoading || !_acceptTerms
+                      ? null
+                      : _signUp,
                   isLoading: authState.isLoading,
                 ),
                 SizedBox(height: 24.h),
@@ -292,6 +309,15 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     return null;
   }
 
+  String? _validateAddress(String? value) {
+    // Address is optional, so no validation needed
+    // Could add length validation if needed
+    if (value != null && value.isNotEmpty && value.length < 10) {
+      return 'Address should be at least 10 characters';
+    }
+    return null;
+  }
+
   String? _validatePassword(String? value) {
     if (value == null || value.isEmpty) {
       return 'Password is required';
@@ -314,25 +340,63 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
   Future<void> _signUp() async {
     if (_formKey.currentState?.validate() ?? false) {
-      final result = await ref.read(authProvider.notifier).signUp(
-            email: _emailController.text.trim(),
-            password: _passwordController.text,
-            firstName: _firstNameController.text.trim(),
-            lastName: _lastNameController.text.trim(),
-            phoneNumber: _phoneController.text.trim().isEmpty 
-                ? null 
-                : _phoneController.text.trim(),
-          );
-
-      if (result.isSuccess && mounted) {
-        // Show success message and navigate
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(AppConstants.registerSuccessMessage),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-          ),
+      try {
+        // Debug: Log the form data being sent
+        print('=== REGISTRATION FORM DATA ===');
+        print('Email: ${_emailController.text.trim()}');
+        print('First Name: ${_firstNameController.text.trim()}');
+        print('Last Name: ${_lastNameController.text.trim()}');
+        print(
+          'Phone: ${_phoneController.text.trim().isEmpty ? 'null' : _phoneController.text.trim()}',
         );
-        context.go('/home');
+        print(
+          'Address: ${_addressController.text.trim().isEmpty ? 'null' : _addressController.text.trim()}',
+        );
+        print('=== CALLING SIGNUP METHOD ===');
+
+        final result = await ref
+            .read(authProvider.notifier)
+            .signUp(
+              email: _emailController.text.trim(),
+              password: _passwordController.text,
+              firstName: _firstNameController.text.trim(),
+              lastName: _lastNameController.text.trim(),
+              phoneNumber: _phoneController.text.trim().isEmpty
+                  ? null
+                  : _phoneController.text.trim(),
+              address: _addressController.text.trim().isEmpty
+                  ? null
+                  : _addressController.text.trim(),
+            );
+
+        if (result.isSuccess && mounted) {
+          // Show success message and navigate
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(AppConstants.registerSuccessMessage),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+            ),
+          );
+          context.go('/home');
+        } else if (result.isFailure && mounted) {
+          // Show error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.failure?.message ?? 'Registration failed'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+      } catch (e) {
+        // Handle any unexpected errors
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Registration error: ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
       }
     }
   }

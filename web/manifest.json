@@ -1,11 +1,11 @@
 {
-    "name": "bfa",
-    "short_name": "bfa",
+    "name": "Best Farmers",
+    "short_name": "Best Farmers",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#2D5016",
+    "theme_color": "#2D5016",
+    "description": "Connecting you with the best farmers",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../domain/entities/cart_item_entity.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/utils/helpers.dart';
 import '../../../../shared/widgets/loading_widget.dart';
 import '../../../../shared/widgets/quantity_selector.dart';
 
@@ -41,9 +42,7 @@ class CartItemCard extends StatelessWidget {
                 SizedBox(width: 12.w),
 
                 // Product Details
-                Expanded(
-                  child: _buildProductDetails(theme),
-                ),
+                Expanded(child: _buildProductDetails(theme)),
 
                 // Remove Button
                 IconButton(
@@ -53,10 +52,7 @@ class CartItemCard extends StatelessWidget {
                     color: theme.colorScheme.error,
                     size: 20.w,
                   ),
-                  constraints: BoxConstraints(
-                    minWidth: 32.w,
-                    minHeight: 32.h,
-                  ),
+                  constraints: BoxConstraints(minWidth: 32.w, minHeight: 32.h),
                   padding: EdgeInsets.zero,
                 ),
               ],
@@ -102,9 +98,8 @@ class CartItemCard extends StatelessWidget {
             ? CachedNetworkImage(
                 imageUrl: item.product.primaryImageUrl!,
                 fit: BoxFit.cover,
-                placeholder: (context, url) => const Center(
-                  child: LoadingWidget(),
-                ),
+                placeholder: (context, url) =>
+                    const Center(child: LoadingWidget()),
                 errorWidget: (context, url, error) => Container(
                   color: theme.colorScheme.surfaceContainerHighest,
                   child: Icon(
@@ -157,8 +152,7 @@ class CartItemCard extends StatelessWidget {
           children: [
             if (item.product.isOrganic)
               _buildBadge('Organic', Colors.green, theme),
-            if (item.product.isFresh)
-              _buildBadge('Fresh', Colors.blue, theme),
+            if (item.product.isFresh) _buildBadge('Fresh', Colors.blue, theme),
             if (item.hasDiscount)
               _buildBadge(
                 '${item.discountPercentage.toStringAsFixed(0)}% OFF',
@@ -196,7 +190,7 @@ class CartItemCard extends StatelessWidget {
         // Unit Price
         if (item.hasDiscount) ...[
           Text(
-            '\$${item.unitPrice.toStringAsFixed(2)}',
+            Helpers.formatCurrency(item.unitPrice),
             style: theme.textTheme.bodySmall?.copyWith(
               decoration: TextDecoration.lineThrough,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
@@ -204,11 +198,11 @@ class CartItemCard extends StatelessWidget {
           ),
         ],
         Text(
-          '\$${item.effectiveUnitPrice.toStringAsFixed(2)}/${item.unit}',
+          '${Helpers.formatCurrency(item.effectiveUnitPrice)}/${item.unit}',
           style: theme.textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.w600,
-            color: item.hasDiscount 
-                ? theme.colorScheme.error 
+            color: item.hasDiscount
+                ? theme.colorScheme.error
                 : theme.colorScheme.onSurface,
           ),
         ),
@@ -216,7 +210,7 @@ class CartItemCard extends StatelessWidget {
 
         // Total Price
         Text(
-          'Total: \$${item.totalPrice.toStringAsFixed(2)}',
+          'Total: ${Helpers.formatCurrency(item.totalPrice)}',
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
             color: theme.colorScheme.primary,
@@ -227,7 +221,7 @@ class CartItemCard extends StatelessWidget {
         if (item.totalSavings > 0) ...[
           SizedBox(height: 2.h),
           Text(
-            'Save \$${item.totalSavings.toStringAsFixed(2)}',
+            'Save ${Helpers.formatCurrency(item.totalSavings)}',
             style: theme.textTheme.bodySmall?.copyWith(
               color: Colors.green,
               fontWeight: FontWeight.w600,
