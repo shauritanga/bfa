@@ -6,6 +6,7 @@ import '../../domain/repositories/order_repository.dart';
 import '../../domain/usecases/order_usecases.dart';
 import '../../data/repositories/order_repository_impl.dart';
 import '../../../cart/domain/entities/cart_entity.dart';
+import '../../../payments/domain/entities/payment_response_entity.dart';
 import '../../../products/presentation/providers/product_provider.dart';
 import '../../../../core/services/firestore_service.dart';
 import '../../../../core/repositories/base_repository.dart';
@@ -171,6 +172,42 @@ class OrderNotifier extends StateNotifier<OrderState> {
     } else {
       state = state.copyWith(
         error: result.failure?.message ?? 'Failed to update order status',
+        isLoading: false,
+      );
+      return false;
+    }
+  }
+
+  /// Update payment status
+  Future<bool> updatePaymentStatus({
+    required String orderId,
+    required PaymentStatus paymentStatus,
+    String? transactionId,
+    String? failureReason,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+
+    final result = await _repository.updatePaymentStatus(
+      orderId: orderId,
+      paymentStatus: paymentStatus,
+      transactionId: transactionId,
+      failureReason: failureReason,
+    );
+
+    if (result.isSuccess) {
+      final updatedOrders = state.orders.map((order) {
+        return order.id == orderId ? result.data! : order;
+      }).toList();
+
+      state = state.copyWith(
+        orders: updatedOrders,
+        currentOrder: result.data!,
+        isLoading: false,
+      );
+      return true;
+    } else {
+      state = state.copyWith(
+        error: result.failure?.message ?? 'Failed to update payment status',
         isLoading: false,
       );
       return false;

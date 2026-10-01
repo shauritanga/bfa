@@ -275,8 +275,8 @@ class CartEntity extends Equatable {
 
   /// Create empty cart
   factory CartEntity.empty({
-    required String id,
-    required String userId,
+    String id = '',
+    String userId = '',
   }) {
     final now = DateTime.now();
     return CartEntity(

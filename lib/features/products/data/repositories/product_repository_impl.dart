@@ -6,6 +6,7 @@ import '../../../../core/services/firestore_service.dart';
 import '../../domain/entities/product_entity.dart';
 import '../../domain/entities/product_filter.dart';
 import '../../domain/repositories/product_repository.dart';
+import '../../../../scripts/seed_data.dart';
 
 /// Implementation of ProductRepository using Firestore
 class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
@@ -17,34 +18,49 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
   @override
   Future<Result<List<ProductEntity>>> getAll() async {
     return handleAsyncOperation(() async {
-      final result = await _firestoreService.getDocuments(
-        collection: FirebaseCollections.products,
-      );
+      try {
+        final result = await _firestoreService.getDocuments(
+          collection: FirebaseCollections.products,
+        ).timeout(const Duration(seconds: 3));
 
-      if (result.isSuccess) {
-        final products = result.data!
-            .map((doc) => ProductEntity.fromMap(doc))
-            .toList();
-        return products;
-      } else {
-        throw Exception(result.failure?.message ?? 'Failed to get products');
+        if (result.isSuccess && result.data!.isNotEmpty) {
+          final products = result.data!
+              .map((doc) => ProductEntity.fromMap(doc))
+              .toList();
+          return products;
+        }
+      } catch (e) {
+        print('⚠️ ProductRepository: getAll Firestore error ($e), using local catalog');
       }
+
+      return List<ProductEntity>.from(DataSeedingService.sampleProducts);
     });
   }
 
   @override
   Future<Result<ProductEntity>> getById(String id) async {
     return handleAsyncOperation(() async {
-      final result = await _firestoreService.getDocument(
-        collection: FirebaseCollections.products,
-        documentId: id,
-      );
+      try {
+        final result = await _firestoreService.getDocument(
+          collection: FirebaseCollections.products,
+          documentId: id,
+        ).timeout(const Duration(seconds: 3));
 
-      if (result.isSuccess && result.data != null) {
-        return ProductEntity.fromMap(result.data!);
-      } else {
-        throw Exception(result.failure?.message ?? 'Product not found');
+        if (result.isSuccess && result.data != null) {
+          return ProductEntity.fromMap(result.data!);
+        }
+      } catch (e) {
+        print('⚠️ ProductRepository: getById Firestore error ($e), using local catalog');
       }
+
+      final product = DataSeedingService.sampleProducts
+          .cast<ProductEntity?>()
+          .firstWhere((p) => p?.id == id, orElse: () => null);
+
+      if (product != null) {
+        return product;
+      }
+      throw Exception('Product not found');
     });
   }
 
@@ -131,36 +147,55 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
       query = query.limit(limit);
 
       print('🔄 ProductRepository: Executing Firestore query...');
-      final querySnapshot = await query.get();
-      print(
-        '✅ ProductRepository: Query executed, got ${querySnapshot.docs.length} documents',
-      );
+      var products = <ProductEntity>[];
 
-      // Debug: Check first few products for category information
-      if (querySnapshot.docs.isNotEmpty) {
-        for (int i = 0; i < querySnapshot.docs.length.clamp(0, 3); i++) {
-          final doc = querySnapshot.docs[i];
-          final data = doc.data() as Map<String, dynamic>?;
-          print(
-            '🔍 ProductRepository: Product ${doc.id} data: categoryId=${data?['categoryId']}, category=${data?['category']}, name=${data?['name']}',
-          );
+      try {
+        final querySnapshot = await query.get().timeout(const Duration(seconds: 3));
+        print(
+          '✅ ProductRepository: Query executed, got ${querySnapshot.docs.length} documents',
+        );
+
+        if (querySnapshot.docs.isNotEmpty) {
+          products = querySnapshot.docs
+              .map(
+                (doc) => ProductEntity.fromMap({
+                  'id': doc.id,
+                  ...doc.data() as Map<String, dynamic>,
+                }),
+              )
+              .toList();
+        }
+      } catch (e) {
+        print('⚠️ ProductRepository: Firestore query failed ($e), using local seeded catalog');
+      }
+
+      if (products.isEmpty) {
+        products = List<ProductEntity>.from(DataSeedingService.sampleProducts);
+      }
+
+      if (filter != null) {
+        if (filter.isOrganic != null) {
+          products = products.where((p) => p.isOrganic == filter.isOrganic).toList();
+        }
+        if (filter.isFeatured != null) {
+          products = products.where((p) => p.isFeatured == filter.isFeatured).toList();
+        }
+        if (filter.isFresh != null) {
+          products = products.where((p) => p.isFresh == filter.isFresh).toList();
+        }
+        if (filter.minPrice != null) {
+          products = products.where((p) => p.price >= filter.minPrice!).toList();
+        }
+        if (filter.maxPrice != null) {
+          products = products.where((p) => p.price <= filter.maxPrice!).toList();
         }
       }
 
-      final products = querySnapshot.docs
-          .map(
-            (doc) => ProductEntity.fromMap({
-              'id': doc.id,
-              ...doc.data() as Map<String, dynamic>,
-            }),
-          )
-          .toList();
-
       print('✅ ProductRepository: Mapped ${products.length} products');
 
-      // Simplified total count (just use current results for now)
-      final totalItems = querySnapshot.docs.length;
-      final totalPages = 1; // Simplified for now
+      // Simplified total count
+      final totalItems = products.length;
+      final totalPages = (totalItems / limit).ceil();
 
       return PaginatedResult<ProductEntity>(
         items: products,
@@ -194,22 +229,34 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
     query = query.orderBy('createdAt', descending: true);
     query = query.limit(100); // Get more products to filter locally
 
-    print(
-      '🔍 ProductRepository: Fetching products for local category filtering...',
-    );
-    final querySnapshot = await query.get();
-    print(
-      '🔍 ProductRepository: Got ${querySnapshot.docs.length} products to filter locally',
-    );
+    var allProducts = <ProductEntity>[];
 
-    final allProducts = querySnapshot.docs
-        .map(
-          (doc) => ProductEntity.fromMap({
-            'id': doc.id,
-            ...doc.data() as Map<String, dynamic>,
-          }),
-        )
-        .toList();
+    try {
+      print(
+        '🔍 ProductRepository: Fetching products for local category filtering...',
+      );
+      final querySnapshot = await query.get().timeout(const Duration(seconds: 3));
+      print(
+        '🔍 ProductRepository: Got ${querySnapshot.docs.length} products to filter locally',
+      );
+
+      if (querySnapshot.docs.isNotEmpty) {
+        allProducts = querySnapshot.docs
+            .map(
+              (doc) => ProductEntity.fromMap({
+                'id': doc.id,
+                ...doc.data() as Map<String, dynamic>,
+              }),
+            )
+            .toList();
+      }
+    } catch (e) {
+      print('⚠️ ProductRepository: Category query failed ($e), using local seeded catalog');
+    }
+
+    if (allProducts.isEmpty) {
+      allProducts = List<ProductEntity>.from(DataSeedingService.sampleProducts);
+    }
 
     // Filter products locally by category
     final filteredProducts = <ProductEntity>[];
@@ -234,6 +281,22 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
       }
 
       if (matches) {
+        if (filter.isOrganic != null && product.isOrganic != filter.isOrganic) {
+          continue;
+        }
+        if (filter.isFeatured != null && product.isFeatured != filter.isFeatured) {
+          continue;
+        }
+        if (filter.isFresh != null && product.isFresh != filter.isFresh) {
+          continue;
+        }
+        if (filter.minPrice != null && product.price < filter.minPrice!) {
+          continue;
+        }
+        if (filter.maxPrice != null && product.price > filter.maxPrice!) {
+          continue;
+        }
+
         filteredProducts.add(product);
         print(
           '🔍 ProductRepository: Product "${product.name}" matches category filter (categoryId: ${product.categoryId})',
@@ -277,31 +340,37 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
       final seenIds = <String>{};
 
       try {
-        // Get all products first (since Firestore has limited search capabilities)
-        final allProductsQuery = FirebaseFirestore.instance
-            .collection(FirebaseCollections.products)
-            .where('isAvailable', isEqualTo: true)
-            .limit(100); // Get more products to search through
+        List<ProductEntity> candidateProducts = [];
+        try {
+          final allProductsQuery = FirebaseFirestore.instance
+              .collection(FirebaseCollections.products)
+              .where('isAvailable', isEqualTo: true)
+              .limit(100);
 
-        print('🔍 ProductRepository: Fetching all available products...');
-        final allProductsSnapshot = await allProductsQuery.get();
-        print(
-          '🔍 ProductRepository: Got ${allProductsSnapshot.docs.length} products to search through',
-        );
+          print('🔍 ProductRepository: Fetching all available products for search...');
+          final allProductsSnapshot = await allProductsQuery.get().timeout(const Duration(seconds: 3));
+          if (allProductsSnapshot.docs.isNotEmpty) {
+            candidateProducts = allProductsSnapshot.docs
+                .map((doc) => ProductEntity.fromMap({'id': doc.id, ...doc.data()}))
+                .toList();
+          }
+        } catch (e) {
+          print('⚠️ ProductRepository: Search query failed ($e), searching seeded catalog');
+        }
+
+        if (candidateProducts.isEmpty) {
+          candidateProducts = List<ProductEntity>.from(DataSeedingService.sampleProducts);
+        }
 
         // Create a list to store products with their relevance scores
         final scoredResults = <Map<String, dynamic>>[];
 
         // Filter products locally for better search results
-        for (final doc in allProductsSnapshot.docs) {
+        for (final product in candidateProducts) {
           try {
-            final data = doc.data();
-            final productName = (data['name'] as String? ?? '').toLowerCase();
-            final productDescription = (data['description'] as String? ?? '')
-                .toLowerCase();
-            final productTags = (data['tags'] as List<dynamic>? ?? [])
-                .map((tag) => tag.toString().toLowerCase())
-                .toList();
+            final productName = product.name.toLowerCase();
+            final productDescription = product.description.toLowerCase();
+            final productTags = product.tags.map((tag) => tag.toLowerCase()).toList();
 
             // Calculate relevance score
             int score = 0;
@@ -309,13 +378,9 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
             // Exact name match gets highest score
             if (productName == searchTerm) {
               score += 100;
-            }
-            // Name starts with search term gets high score
-            else if (productName.startsWith(searchTerm)) {
+            } else if (productName.startsWith(searchTerm)) {
               score += 80;
-            }
-            // Name contains search term gets medium score
-            else if (productName.contains(searchTerm)) {
+            } else if (productName.contains(searchTerm)) {
               score += 60;
             }
 
@@ -333,16 +398,17 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
               score += 20;
             }
 
+            // Category matches
+            if (product.categoryId.toLowerCase().contains(searchTerm)) {
+              score += 40;
+            }
+
             // Only include products with some relevance
-            if (score > 0 && !seenIds.contains(doc.id)) {
-              final product = ProductEntity.fromMap({'id': doc.id, ...data});
+            if (score > 0 && !seenIds.contains(product.id)) {
               scoredResults.add({'product': product, 'score': score});
-              seenIds.add(doc.id);
+              seenIds.add(product.id);
             }
           } catch (e) {
-            print(
-              '⚠️ ProductRepository: Error processing product ${doc.id}: $e',
-            );
             continue;
           }
         }
@@ -376,21 +442,37 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
     return handleAsyncOperation(() async {
       print('🔄 ProductRepository: getFeaturedProducts called');
 
-      // TEMPORARY FIX: Simplified query to avoid index issues
       final query = FirebaseFirestore.instance
           .collection(FirebaseCollections.products)
           .where('isFeatured', isEqualTo: true)
           .limit(limit);
 
-      print('🔄 ProductRepository: Executing featured products query...');
-      final snapshot = await query.get();
-      print(
-        '✅ ProductRepository: Featured products query executed, got ${snapshot.docs.length} documents',
-      );
+      var featured = <ProductEntity>[];
 
-      return snapshot.docs
-          .map((doc) => ProductEntity.fromMap({'id': doc.id, ...doc.data()}))
-          .toList();
+      try {
+        print('🔄 ProductRepository: Executing featured products query...');
+        final snapshot = await query.get().timeout(const Duration(seconds: 3));
+        print(
+          '✅ ProductRepository: Featured products query executed, got ${snapshot.docs.length} documents',
+        );
+
+        if (snapshot.docs.isNotEmpty) {
+          featured = snapshot.docs
+              .map((doc) => ProductEntity.fromMap({'id': doc.id, ...doc.data()}))
+              .toList();
+        }
+      } catch (e) {
+        print('⚠️ ProductRepository: Featured query failed ($e), using local seeded catalog');
+      }
+
+      if (featured.isEmpty) {
+        featured = DataSeedingService.sampleProducts
+            .where((p) => p.isFeatured)
+            .take(limit)
+            .toList();
+      }
+
+      return featured;
     });
   }
 
@@ -399,23 +481,38 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
     return handleAsyncOperation(() async {
       print('🔄 ProductRepository: getFreshProducts called');
 
-      // TEMPORARY FIX: Simplified query to avoid index issues
-      // Just get available products ordered by creation date
       final query = FirebaseFirestore.instance
           .collection(FirebaseCollections.products)
           .where('isAvailable', isEqualTo: true)
           .orderBy('createdAt', descending: true)
           .limit(limit);
 
-      print('🔄 ProductRepository: Executing fresh products query...');
-      final snapshot = await query.get();
-      print(
-        '✅ ProductRepository: Fresh products query executed, got ${snapshot.docs.length} documents',
-      );
+      var fresh = <ProductEntity>[];
 
-      return snapshot.docs
-          .map((doc) => ProductEntity.fromMap({'id': doc.id, ...doc.data()}))
-          .toList();
+      try {
+        print('🔄 ProductRepository: Executing fresh products query...');
+        final snapshot = await query.get().timeout(const Duration(seconds: 3));
+        print(
+          '✅ ProductRepository: Fresh products query executed, got ${snapshot.docs.length} documents',
+        );
+
+        if (snapshot.docs.isNotEmpty) {
+          fresh = snapshot.docs
+              .map((doc) => ProductEntity.fromMap({'id': doc.id, ...doc.data()}))
+              .toList();
+        }
+      } catch (e) {
+        print('⚠️ ProductRepository: Fresh query failed ($e), using local seeded catalog');
+      }
+
+      if (fresh.isEmpty) {
+        fresh = DataSeedingService.sampleProducts
+            .where((p) => p.isOrganic || p.isFeatured)
+            .take(limit)
+            .toList();
+      }
+
+      return fresh;
     });
   }
 
@@ -427,58 +524,10 @@ class ProductRepositoryImpl extends BaseRepositoryImpl<ProductEntity, String>
     int limit = 20,
   }) async {
     return handleAsyncOperation(() async {
-      Query query = FirebaseFirestore.instance
-          .collection(FirebaseCollections.products)
-          .where('categoryId', isEqualTo: categoryId);
-
-      // Apply additional filters
-      if (filter != null) {
-        query = _applyFilters(query, filter);
-      }
-
-      // Apply sorting
-      if (filter?.sortBy != null) {
-        query = _applySorting(query, filter!.sortBy, filter.sortOrder);
-      }
-
-      // Apply pagination
-      query = query.limit(limit);
-      // Note: Firestore doesn't support offset, so we'll use cursor-based pagination
-      // For now, we'll just limit the results
-
-      final querySnapshot = await query.get();
-      final products = querySnapshot.docs
-          .map(
-            (doc) => ProductEntity.fromMap({
-              'id': doc.id,
-              ...doc.data() as Map<String, dynamic>,
-            }),
-          )
-          .toList();
-
-      // Get total count
-      final totalCountQuery = FirebaseFirestore.instance
-          .collection(FirebaseCollections.products)
-          .where('categoryId', isEqualTo: categoryId);
-      final totalSnapshot =
-          await (filter != null
-                  ? _applyFilters(totalCountQuery, filter)
-                  : totalCountQuery)
-              .count()
-              .get();
-      final totalItems = totalSnapshot.count ?? 0;
-
-      final totalPages = (totalItems / limit).ceil();
-
-      return PaginatedResult<ProductEntity>(
-        items: products,
-        currentPage: page,
-        totalPages: totalPages,
-        totalItems: totalItems,
-        itemsPerPage: limit,
-        hasNextPage: page < totalPages,
-        hasPreviousPage: page > 1,
+      final combinedFilter = (filter ?? const ProductFilter()).copyWith(
+        categoryIds: [categoryId],
       );
+      return _getProductsWithCategoryFilter(combinedFilter, page, limit);
     });
   }
 

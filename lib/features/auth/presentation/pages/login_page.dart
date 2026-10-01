@@ -253,17 +253,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       // Clear any previous errors before attempting login
       ref.read(authProvider.notifier).clearError();
 
-      // Just call the sign in method
-      // Navigation will be handled by the auth state listener
-      await ref
+      final result = await ref
           .read(authProvider.notifier)
           .signIn(
             email: _emailController.text.trim(),
             password: _passwordController.text,
           );
 
-      // Note: Success navigation is handled by the auth state listener above
-      // Error handling is also handled by the auth state listener
+      if (mounted) {
+        if (result.isSuccess) {
+          context.go('/home');
+        } else if (result.isFailure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result.failure?.message ?? 'Sign in failed'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+      }
     }
   }
 }

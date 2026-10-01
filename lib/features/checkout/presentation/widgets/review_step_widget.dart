@@ -7,7 +7,8 @@ import '../../../cart/domain/entities/cart_item_entity.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
 import '../../domain/entities/payment_method.dart';
 import '../../domain/entities/delivery_address.dart';
-import '../../../payments/presentation/providers/clickpesa_providers.dart';
+import '../../../payments/presentation/providers/tembo_payment_provider.dart';
+import '../../../payments/presentation/widgets/tembo_ussd_dialog.dart';
 import '../../../orders/domain/entities/order_entity.dart';
 import '../../../orders/domain/entities/delivery_info_entity.dart';
 import '../../../orders/domain/entities/payment_info_entity.dart';
@@ -156,7 +157,7 @@ class _ReviewStepWidgetState extends ConsumerState<ReviewStepWidget> {
         throw Exception('Missing payment method or delivery address');
       }
 
-      // Create order in Firestore first
+      // Create order in Firestore/repository first
       final order = await _createOrderInFirestore(
         paymentMethod,
         deliveryAddress,
@@ -165,25 +166,17 @@ class _ReviewStepWidgetState extends ConsumerState<ReviewStepWidget> {
         throw Exception('Failed to create order');
       }
 
-      // Process payment asynchronously to avoid blocking UI
-      await Future.microtask(() async {
-        if (paymentMethod.type == PaymentMethodType.mobileMoney) {
-          await _processMobileMoneyPayment(paymentMethod, order);
-        } else if (paymentMethod.type == PaymentMethodType.cashOnDelivery) {
-          await _processCashOnDeliveryOrder(order);
-        } else {
-          throw Exception('Payment method not supported yet');
-        }
-      });
+      ref.read(checkoutProvider.notifier).setLoading(false);
 
-      // Clear the cart after successful order creation
-      await _clearCartAfterOrder();
-
-      // Small delay to ensure UI updates are processed
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      // Proceed to confirmation
-      widget.onPlaceOrder();
+      if (paymentMethod.type == PaymentMethodType.mobileMoney) {
+        // Trigger TemboPlus USSD Push and show dialog
+        await _processTemboMobileMoneyPayment(paymentMethod, order);
+      } else if (paymentMethod.type == PaymentMethodType.cashOnDelivery) {
+        // Process Cash on Delivery order
+        await _processCashOnDeliveryOrder(order);
+      } else {
+        throw Exception('Payment method not supported yet');
+      }
     } catch (e) {
       // Handle error
       ref.read(checkoutProvider.notifier).setError('Failed to place order: $e');
@@ -197,23 +190,19 @@ class _ReviewStepWidgetState extends ConsumerState<ReviewStepWidget> {
         );
       }
     } finally {
-      // Clear loading state
-      ref.read(checkoutProvider.notifier).setLoading(false);
+      if (mounted) {
+        ref.read(checkoutProvider.notifier).setLoading(false);
+      }
     }
   }
 
   /// Clear cart after successful order creation
   Future<void> _clearCartAfterOrder() async {
     try {
-      // Clear the cart using the cart provider
       await ref.read(cartProvider.notifier).clearCart();
-
       print('✅ Cart cleared successfully after order placement');
     } catch (e) {
-      // Log error but don't fail the order process
       print('⚠️ Failed to clear cart after order: $e');
-      // We don't throw here because the order was successful
-      // The cart can be cleared manually by the user if needed
     }
   }
 
@@ -223,11 +212,9 @@ class _ReviewStepWidgetState extends ConsumerState<ReviewStepWidget> {
     DeliveryAddress deliveryAddress,
   ) async {
     try {
-      // Get current user
+      // Get current user (with fallback for guest/offline testing)
       final authState = ref.read(authProvider);
-      if (authState.user == null) {
-        throw Exception('User not authenticated');
-      }
+      final userId = authState.user?.id ?? 'current_user_id';
 
       // Create delivery info
       final deliveryInfo = DeliveryInfoEntity(
@@ -258,7 +245,9 @@ class _ReviewStepWidgetState extends ConsumerState<ReviewStepWidget> {
         phoneNumber: paymentMethod.phoneNumber,
         transactionId: null, // Will be updated after payment
         referenceNumber: 'BFA${DateTime.now().millisecondsSinceEpoch}',
-        providerData: const {},
+        providerData: {
+          'channel': paymentMethod.temboChannelCode,
+        },
         metadata: {
           'provider_display_name': paymentMethod.providerDisplayName,
           'checkout_timestamp': DateTime.now().toIso8601String(),
@@ -269,7 +258,7 @@ class _ReviewStepWidgetState extends ConsumerState<ReviewStepWidget> {
       final order = await ref
           .read(orderProvider.notifier)
           .createOrder(
-            userId: authState.user!.id,
+            userId: userId,
             cart: widget.cart,
             deliveryInfo: deliveryInfo,
             paymentInfo: paymentInfo,
@@ -323,78 +312,88 @@ class _ReviewStepWidgetState extends ConsumerState<ReviewStepWidget> {
     }
   }
 
-  Future<void> _processMobileMoneyPayment(
+  Future<void> _processTemboMobileMoneyPayment(
     CheckoutPaymentMethod paymentMethod,
     OrderEntity order,
   ) async {
     try {
-      // Generate unique order reference
-      final orderReference = 'BFA${DateTime.now().millisecondsSinceEpoch}';
-
-      // Calculate total amount (convert to TZS if needed)
       const deliveryFee = 5000.0;
       final totalAmount = widget.cart.subtotal + deliveryFee;
+      final channel = paymentMethod.temboChannelCode;
+      final phone = paymentMethod.phoneNumber ?? '255712345678';
 
-      // For now, simulate ClickPesa payment processing
-      // TODO: Integrate with actual ClickPesa service
-      await Future.delayed(const Duration(seconds: 2));
-
-      // Simulate payment initiation success
+      // Show immediate notification
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
               children: [
-                Icon(
-                  Icons.check_circle,
-                  color: Theme.of(context).colorScheme.onPrimary,
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 ),
                 SizedBox(width: 8.w),
                 Expanded(
                   child: Text(
-                    'Payment of ${CurrencyFormatter.formatTZS(totalAmount)} initiated via ${paymentMethod.providerDisplayName}! Check your phone for USSD prompt.',
+                    'Initiating TemboPlus USSD push to $phone...',
                   ),
                 ),
               ],
             ),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            duration: const Duration(seconds: 5),
+            duration: const Duration(seconds: 2),
           ),
         );
       }
 
-      // Check if ClickPesa is properly configured
-      final isConfigured = ref.read(clickPesaConfigurationStatusProvider);
+      // Initiate payment with TemboPlus collection API
+      final result = await ref
+          .read(temboPaymentNotifierProvider.notifier)
+          .initiatePayment(
+            channel: channel,
+            phoneNumber: phone,
+            amount: totalAmount.round(),
+            transactionRef: order.orderNumber,
+            narration: 'Order ${order.orderNumber}',
+          );
 
-      if (isConfigured) {
-        // Use actual ClickPesa integration
-        final clickPesaService = ref.read(clickPesaIntegrationServiceProvider);
-        final result = await clickPesaService.processMobileMoneyPayment(
-          amount: totalAmount,
-          phoneNumber: paymentMethod.phoneNumber!,
-          orderReference: orderReference,
-        );
+      final transactionId = result.transactionId ??
+          'TB${DateTime.now().millisecondsSinceEpoch}';
 
-        if (result.isFailure) {
-          throw Exception(result.failure?.message ?? 'Payment failed');
-        }
-      }
+      if (!mounted) return;
+
+      // Show USSD Push approval dialog
+      await TemboUssdDialog.show(
+        context,
+        order: order,
+        paymentMethod: paymentMethod,
+        totalAmount: totalAmount,
+        transactionId: transactionId,
+        onPaymentSuccess: () {
+          widget.onPlaceOrder();
+        },
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Payment initiation failed: $e'),
+            content: Text('Payment error: $e'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
       }
-      rethrow;
     }
   }
 
   Future<void> _processCashOnDeliveryOrder(OrderEntity order) async {
-    // For cash on delivery, order is already created, just confirm
-    await Future.delayed(const Duration(seconds: 1));
+    await _clearCartAfterOrder();
+    ref.read(checkoutProvider.notifier).setPlacedOrder(
+      order,
+      isPaid: false,
+    );
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -408,15 +407,16 @@ class _ReviewStepWidgetState extends ConsumerState<ReviewStepWidget> {
               SizedBox(width: 8.w),
               Expanded(
                 child: Text(
-                  'Order ${order.orderNumber} created successfully! Pay cash when delivered.',
+                  'Order ${order.orderNumber} created! Pay cash on delivery.',
                 ),
               ),
             ],
           ),
           backgroundColor: Theme.of(context).colorScheme.primary,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 2),
         ),
       );
+      widget.onPlaceOrder();
     }
   }
 

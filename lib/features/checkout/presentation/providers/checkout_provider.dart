@@ -3,6 +3,7 @@ import '../../domain/entities/delivery_address.dart';
 import '../../domain/entities/payment_method.dart';
 import '../../../orders/domain/entities/delivery_info_entity.dart';
 import '../../../orders/domain/entities/payment_info_entity.dart';
+import '../../../orders/domain/entities/order_entity.dart';
 
 /// Checkout state
 class CheckoutState {
@@ -13,6 +14,9 @@ class CheckoutState {
   final String? error;
   final bool isAddressValid;
   final bool isPaymentValid;
+  final OrderEntity? placedOrder;
+  final String? temboTransactionId;
+  final bool isPaid;
 
   const CheckoutState({
     this.currentStep = 0,
@@ -22,6 +26,9 @@ class CheckoutState {
     this.error,
     this.isAddressValid = false,
     this.isPaymentValid = false,
+    this.placedOrder,
+    this.temboTransactionId,
+    this.isPaid = false,
   });
 
   CheckoutState copyWith({
@@ -32,6 +39,9 @@ class CheckoutState {
     String? error,
     bool? isAddressValid,
     bool? isPaymentValid,
+    OrderEntity? placedOrder,
+    String? temboTransactionId,
+    bool? isPaid,
   }) {
     return CheckoutState(
       currentStep: currentStep ?? this.currentStep,
@@ -41,6 +51,9 @@ class CheckoutState {
       error: error ?? this.error,
       isAddressValid: isAddressValid ?? this.isAddressValid,
       isPaymentValid: isPaymentValid ?? this.isPaymentValid,
+      placedOrder: placedOrder ?? this.placedOrder,
+      temboTransactionId: temboTransactionId ?? this.temboTransactionId,
+      isPaid: isPaid ?? this.isPaid,
     );
   }
 
@@ -52,6 +65,28 @@ class CheckoutState {
 /// Checkout notifier
 class CheckoutNotifier extends StateNotifier<CheckoutState> {
   CheckoutNotifier() : super(const CheckoutState());
+
+  /// Set placed order and move to confirmation step
+  void setPlacedOrder(
+    OrderEntity order, {
+    String? temboTransactionId,
+    bool isPaid = false,
+  }) {
+    state = state.copyWith(
+      placedOrder: order,
+      temboTransactionId: temboTransactionId,
+      isPaid: isPaid,
+      currentStep: 3,
+    );
+  }
+
+  /// Mark order as paid
+  void markOrderPaid(String? transactionId) {
+    state = state.copyWith(
+      isPaid: true,
+      temboTransactionId: transactionId ?? state.temboTransactionId,
+    );
+  }
 
   /// Move to next step
   void nextStep() {

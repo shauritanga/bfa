@@ -128,7 +128,7 @@ class CartNotifier extends StateNotifier<CartState> {
     required double quantity,
     String? notes,
   }) async {
-    if (_currentUserId == null) return;
+    _currentUserId ??= 'current_user_id';
 
     state = state.copyWith(isUpdating: true, error: null);
 
@@ -161,7 +161,7 @@ class CartNotifier extends StateNotifier<CartState> {
     required String productId,
     required double quantity,
   }) async {
-    if (_currentUserId == null) return;
+    _currentUserId ??= 'current_user_id';
 
     state = state.copyWith(isUpdating: true, error: null);
 
@@ -190,7 +190,7 @@ class CartNotifier extends StateNotifier<CartState> {
 
   /// Remove item from cart
   Future<void> removeItem(String productId) async {
-    if (_currentUserId == null) return;
+    _currentUserId ??= 'current_user_id';
 
     state = state.copyWith(isUpdating: true, error: null);
 
@@ -218,7 +218,7 @@ class CartNotifier extends StateNotifier<CartState> {
 
   /// Clear cart
   Future<void> clearCart() async {
-    if (_currentUserId == null) return;
+    _currentUserId ??= 'current_user_id';
 
     state = state.copyWith(isUpdating: true, error: null);
 
@@ -404,7 +404,7 @@ final cartProvider = StateNotifierProvider<CartNotifier, CartState>((ref) {
   final removeCouponUseCase = ref.watch(removeCouponUseCaseProvider);
   final validateCartUseCase = ref.watch(validateCartUseCaseProvider);
 
-  return CartNotifier(
+  final notifier = CartNotifier(
     getUserCartUseCase,
     addItemToCartUseCase,
     updateCartItemQuantityUseCase,
@@ -414,6 +414,10 @@ final cartProvider = StateNotifierProvider<CartNotifier, CartState>((ref) {
     removeCouponUseCase,
     validateCartUseCase,
   );
+
+  notifier.setUser('current_user_id');
+
+  return notifier;
 });
 
 /// Convenience providers

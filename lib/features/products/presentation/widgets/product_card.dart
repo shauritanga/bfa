@@ -379,6 +379,31 @@ class ProductCard extends StatelessWidget {
               ),
             ),
           ),
+
+        // Quick Add to Cart Button (Grid View)
+        if (!isListView && onAddToCart != null && product.isAvailable)
+          Positioned(
+            bottom: 8.h,
+            right: 8.w,
+            child: Material(
+              color: theme.colorScheme.primary,
+              shape: const CircleBorder(),
+              elevation: 3,
+              child: InkWell(
+                onTap: onAddToCart,
+                customBorder: const CircleBorder(),
+                child: SizedBox(
+                  width: 32.w,
+                  height: 32.h,
+                  child: Icon(
+                    Icons.add_shopping_cart,
+                    color: theme.colorScheme.onPrimary,
+                    size: 16.sp,
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

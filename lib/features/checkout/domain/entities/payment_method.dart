@@ -170,6 +170,22 @@ class CheckoutPaymentMethod extends Equatable {
     }
   }
 
+  /// Get Tembo Channel Code for MOMO API
+  String get temboChannelCode {
+    switch (provider) {
+      case PaymentProviderType.mpesa:
+        return 'TZ-VODACOM-C2B';
+      case PaymentProviderType.tigoPesa:
+        return 'TZ-TIGO-C2B';
+      case PaymentProviderType.airltelMoney:
+        return 'TZ-AIRTEL-C2B';
+      case PaymentProviderType.halopesa:
+        return 'TZ-HALOTEL-C2B';
+      case null:
+        return 'TZ-VODACOM-C2B';
+    }
+  }
+
   /// Check if payment method is complete
   bool get isComplete {
     switch (type) {

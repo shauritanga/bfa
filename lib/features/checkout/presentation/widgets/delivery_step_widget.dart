@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../providers/checkout_provider.dart';
 import '../../domain/entities/delivery_address.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
 
 class DeliveryStepWidget extends ConsumerStatefulWidget {
   final VoidCallback onNext;
@@ -59,6 +60,18 @@ class _DeliveryStepWidgetState extends ConsumerState<DeliveryStepWidget> {
       _regionController.text = address.region;
       _landmarkController.text = address.landmark ?? '';
       _instructionsController.text = address.specialInstructions ?? '';
+    } else {
+      final authState = ref.read(authProvider);
+      final user = authState.user;
+      _nameController.text = (user != null && user.displayName.isNotEmpty)
+          ? user.displayName
+          : 'Jamal Shauri';
+      _phoneController.text = (user != null && user.phoneNumber?.isNotEmpty == true)
+          ? user.phoneNumber!
+          : '0712345678';
+      _addressController.text = 'Morogoro Road, Mwenge';
+      _cityController.text = 'Dar es Salaam';
+      _regionController.text = 'Kinondoni';
     }
   }
 

@@ -9,6 +9,7 @@ import '../../../products/presentation/providers/product_provider.dart';
 import '../../../products/presentation/widgets/product_card.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../scripts/seed_data.dart';
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -21,6 +22,7 @@ class _HomePageState extends ConsumerState<HomePage>
     with SingleTickerProviderStateMixin {
   final ScrollController _scrollController = ScrollController();
   late TabController _tabController;
+  bool _isSeeding = false;
 
   final List<String> _categories = [
     'All Products',
@@ -45,12 +47,55 @@ class _HomePageState extends ConsumerState<HomePage>
     super.dispose();
   }
 
-  void _loadInitialData() {
+  Future<void> _loadInitialData() async {
     print('🏠 HomePage: _loadInitialData called');
-    // Load products with refresh to ensure they load even if already loading
     print('🏠 HomePage: Calling productProvider.loadProducts(refresh: true)');
-    ref.read(productProvider.notifier).loadProducts(refresh: true);
-    print('🏠 HomePage: productProvider.loadProducts() called');
+    await ref.read(productProvider.notifier).loadProducts(refresh: true);
+    print('🏠 HomePage: productProvider.loadProducts() completed');
+
+    final products = ref.read(productProvider).products;
+    if (products.isEmpty && !_isSeeding && mounted) {
+      print('🌱 HomePage: 0 products found. Auto-seeding database...');
+      _seedSampleData();
+    }
+  }
+
+  Future<void> _seedSampleData() async {
+    if (_isSeeding) return;
+    setState(() {
+      _isSeeding = true;
+    });
+
+    try {
+      print('🌱 HomePage: Starting seedAllData()...');
+      await DataSeedingService().seedAllData();
+      print('✅ HomePage: Seeding completed, reloading products...');
+      await ref.read(productProvider.notifier).loadProducts(refresh: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sample products seeded successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ HomePage: Error seeding data: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error seeding products: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSeeding = false;
+        });
+      }
+    }
   }
 
   void _addToCart(dynamic product) {
@@ -534,11 +579,22 @@ class _HomePageState extends ConsumerState<HomePage>
                       ),
                       SizedBox(height: 16.h),
                       Text(
-                        'No products available',
+                        _isSeeding
+                            ? 'Seeding sample products...'
+                            : 'No products available',
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: Colors.grey[600],
                         ),
                       ),
+                      SizedBox(height: 16.h),
+                      if (_isSeeding)
+                        const CircularProgressIndicator()
+                      else
+                        ElevatedButton.icon(
+                          onPressed: _seedSampleData,
+                          icon: const Icon(Icons.cloud_upload_outlined),
+                          label: const Text('Seed Sample Products'),
+                        ),
                     ],
                   ),
                 ),

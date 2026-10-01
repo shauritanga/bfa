@@ -61,9 +61,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         return "/login";
       }
 
-      // If user is authenticated and on auth pages, redirect to home
+      // If user is authenticated and on auth or splash pages, redirect to home
       if (isAuthenticated &&
-          (currentPath == "/login" || currentPath == "/register")) {
+          (currentPath == "/login" || currentPath == "/register" || currentPath == "/splash")) {
         return "/home";
       }
 

@@ -799,7 +799,7 @@ class _ProductDetailsScreenState extends ConsumerState<ProductDetailsScreen> {
           label: 'View Cart',
           textColor: Theme.of(context).colorScheme.onPrimary,
           onPressed: () {
-            context.pushNamed('/cart'); // Navigate to cart page
+            context.push('/cart'); // Navigate to cart page
           },
         ),
         duration: const Duration(seconds: 3),

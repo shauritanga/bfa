@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/checkout_provider.dart';
+import '../../../cart/domain/entities/cart_entity.dart';
 import '../../../cart/presentation/providers/cart_provider.dart';
 import '../widgets/delivery_step_widget.dart';
 import '../widgets/payment_step_widget.dart';
@@ -31,8 +32,10 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final cartState = ref.watch(cartProvider);
     final theme = Theme.of(context);
 
-    // If cart is empty, redirect back
-    if (cartState.cart?.isEmpty != false) {
+    // If cart is empty, redirect back only if not on confirmation step and no order placed
+    if (cartState.cart?.isEmpty != false &&
+        checkoutState.currentStep < 3 &&
+        checkoutState.placedOrder == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         context.pop();
       });
@@ -46,12 +49,14 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
         centerTitle: true,
         leading: IconButton(
           onPressed: () {
-            if (checkoutState.currentStep > 0) {
+            if (checkoutState.currentStep > 0 && checkoutState.currentStep < 3) {
               ref.read(checkoutProvider.notifier).previousStep();
               _pageController.previousPage(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeInOut,
               );
+            } else if (checkoutState.currentStep >= 3) {
+              _continueShopping();
             } else {
               context.pop();
             }
@@ -73,7 +78,7 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
                 DeliveryStepWidget(onNext: () => _nextStep()),
                 PaymentStepWidget(onNext: () => _nextStep()),
                 ReviewStepWidget(
-                  cart: cartState.cart!,
+                  cart: cartState.cart ?? CartEntity.empty(),
                   onPlaceOrder: () => _placeOrder(),
                 ),
                 ConfirmationStepWidget(
@@ -190,8 +195,11 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
   }
 
   void _placeOrder() {
-    // This will be implemented in the review step widget
-    _nextStep();
+    _pageController.animateToPage(
+      3,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 
   void _continueShopping() {

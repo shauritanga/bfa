@@ -406,7 +406,8 @@ class AuthService {
       final doc = await _firestore
           .collection(FirebaseCollections.users)
           .doc(user.uid)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 4));
 
       if (doc.exists) {
         print('User document found, parsing data...');
@@ -493,7 +494,8 @@ class AuthService {
           final doc = await _firestore
               .collection(FirebaseCollections.users)
               .doc(user.uid)
-              .get();
+              .get()
+              .timeout(const Duration(seconds: 3));
 
           if (doc.exists) {
             final data = doc.data()!;
@@ -557,15 +559,15 @@ class AuthService {
       await _firestore
           .collection(FirebaseCollections.users)
           .doc(userEntity.id)
-          .set(userData);
+          .set(userData)
+          .timeout(const Duration(seconds: 4));
 
       print('✅ User document created successfully for user: ${userEntity.id}');
       print('=== USER DOCUMENT CREATION COMPLETE ===');
     } catch (e) {
       print('❌ Error creating user document: $e');
       print('Error type: ${e.runtimeType}');
-      print('Stack trace: ${StackTrace.current}');
-      rethrow; // Re-throw to maintain error handling flow
+      // Do not rethrow to avoid blocking the authentication flow
     }
   }
 

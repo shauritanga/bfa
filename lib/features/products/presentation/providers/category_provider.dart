@@ -68,7 +68,7 @@ class CategoryNotifier extends StateNotifier<CategoryState> {
         updatedAt: DateTime.now(),
       ),
       CategoryEntity(
-        id: 'vegetable', // Common variations: 'vegetable', 'vegetables', 'Vegetable'
+        id: 'vegetables',
         name: 'Vegetables',
         description: 'Fresh vegetables from local farms',
         imageUrl: null,
@@ -83,7 +83,7 @@ class CategoryNotifier extends StateNotifier<CategoryState> {
         updatedAt: DateTime.now(),
       ),
       CategoryEntity(
-        id: 'fruit', // Common variations: 'fruit', 'fruits', 'Fruit'
+        id: 'fruits',
         name: 'Fruits',
         description: 'Seasonal fruits and berries',
         imageUrl: null,

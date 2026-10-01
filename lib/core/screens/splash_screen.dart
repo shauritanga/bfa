@@ -19,6 +19,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
 
+  bool _hasNavigated = false;
+
   @override
   void initState() {
     super.initState();
@@ -49,45 +51,59 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _animationController.forward();
   }
 
-  void _checkAuthAndNavigate() {
-    // Wait for animations to complete, then check auth and navigate
-    Future.delayed(const Duration(milliseconds: 2500), () async {
-      if (mounted) {
-        final isAuthenticated = ref.read(isAuthenticatedProvider);
-        final isAuthLoading = ref.read(authLoadingProvider);
+  void _checkAuthAndNavigate() async {
+    // Wait for animations to complete (2 seconds)
+    await Future.delayed(const Duration(milliseconds: 2000));
+    if (!mounted || _hasNavigated) return;
 
-        // If auth is still loading, stay on splash
-        if (isAuthLoading) {
-          return;
-        }
+    // Wait up to 3 seconds for auth to finish loading
+    const maxWaitTime = Duration(seconds: 3);
+    const checkInterval = Duration(milliseconds: 100);
+    final stopwatch = Stopwatch()..start();
 
-        // If user is authenticated, go directly to home
-        if (isAuthenticated) {
-          context.goNamed(AppRoute.home.name);
-          return;
-        }
+    while (mounted && stopwatch.elapsed < maxWaitTime) {
+      final isAuthLoading = ref.read(authLoadingProvider);
+      if (!isAuthLoading) break;
+      await Future.delayed(checkInterval);
+    }
+    stopwatch.stop();
 
-        // For non-authenticated users, wait for onboarding state to load
-        await _waitForOnboardingToLoad();
+    if (!mounted || _hasNavigated) return;
 
-        if (mounted) {
-          final hasSeenOnboarding = ref.read(hasSeenOnboardingProvider);
+    _performNavigation();
+  }
 
-          // Navigate based on app state
-          if (!hasSeenOnboarding) {
-            context.goNamed(AppRoute.onboarding.name);
-          } else {
-            context.goNamed(AppRoute.login.name);
-          }
-        }
+  void _performNavigation() async {
+    if (_hasNavigated || !mounted) return;
+    _hasNavigated = true;
+
+    final isAuthenticated = ref.read(isAuthenticatedProvider);
+
+    // If user is authenticated, go directly to home
+    if (isAuthenticated) {
+      context.goNamed(AppRoute.home.name);
+      return;
+    }
+
+    // For non-authenticated users, wait for onboarding state to load
+    await _waitForOnboardingToLoad();
+
+    if (mounted) {
+      final hasSeenOnboarding = ref.read(hasSeenOnboardingProvider);
+
+      // Navigate based on app state
+      if (!hasSeenOnboarding) {
+        context.goNamed(AppRoute.onboarding.name);
+      } else {
+        context.goNamed(AppRoute.login.name);
       }
-    });
+    }
   }
 
   /// Wait for onboarding state to finish loading
   Future<void> _waitForOnboardingToLoad() async {
-    // Wait up to 3 seconds for onboarding to load
-    const maxWaitTime = Duration(seconds: 3);
+    // Wait up to 2 seconds for onboarding to load
+    const maxWaitTime = Duration(seconds: 2);
     const checkInterval = Duration(milliseconds: 100);
 
     final stopwatch = Stopwatch()..start();
@@ -116,6 +132,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
+    // Listen for auth state resolution to navigate as soon as ready
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      if (!next.isLoading && !_hasNavigated && _animationController.isCompleted) {
+        _performNavigation();
+      }
+    });
 
     return Scaffold(
       backgroundColor: theme.colorScheme.primary,

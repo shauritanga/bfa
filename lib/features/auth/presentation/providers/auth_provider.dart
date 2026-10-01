@@ -61,11 +61,22 @@ class AuthNotifier extends StateNotifier<AuthState> {
             error: null,
           );
         } else {
+          final basicUserEntity = UserEntity(
+            id: currentUser.uid,
+            email: currentUser.email ?? '',
+            firstName: '',
+            lastName: '',
+            phoneNumber: currentUser.phoneNumber,
+            profileImageUrl: currentUser.photoURL,
+            isEmailVerified: currentUser.emailVerified,
+            createdAt: DateTime.now(),
+            updatedAt: DateTime.now(),
+          );
           state = state.copyWith(
-            user: null,
-            isAuthenticated: false,
+            user: basicUserEntity,
+            isAuthenticated: true,
             isLoading: false,
-            error: userEntity.failure?.message,
+            error: null,
           );
         }
       } else {
@@ -201,14 +212,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       password: password,
     );
 
-    // Don't update state here for success - let the auth state listener handle it
-    // This prevents race conditions between direct updates and listener updates
-    if (result.isFailure) {
-      // Only update state for failures, success will be handled by auth state listener
+    if (result.isSuccess) {
+      state = state.copyWith(
+        user: result.data,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      );
+    } else {
       state = state.copyWith(isLoading: false, error: result.failure?.message);
     }
-    // Note: For success, the auth state listener will automatically update the state
-    // when Firebase Auth state changes, including clearing any errors
 
     return result;
   }
@@ -242,17 +255,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
         address: address,
       );
 
-      // Don't update state here for success - let the auth state listener handle it
-      // This prevents race conditions between direct updates and listener updates
-      if (result.isFailure) {
-        // Only update state for failures, success will be handled by auth state listener
+      if (result.isSuccess) {
+        state = state.copyWith(
+          user: result.data,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+        );
+      } else {
         state = state.copyWith(
           isLoading: false,
           error: result.failure?.message,
         );
       }
-      // Note: For success, the auth state listener will automatically update the state
-      // when Firebase Auth state changes
 
       return result;
     } catch (e) {

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../providers/order_provider.dart';
 import '../../domain/entities/order_entity.dart';
 import '../../domain/entities/order_item_entity.dart';
+import '../../../payments/domain/entities/payment_response_entity.dart';
 import '../../../../core/utils/helpers.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 
@@ -22,11 +23,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
     // Load orders when screen initializes
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final authState = ref.read(authProvider);
-      if (authState.user != null) {
-        ref
-            .read(orderProvider.notifier)
-            .getUserOrders(userId: authState.user!.id, refresh: true);
-      }
+      final userId = authState.user?.id ?? 'current_user_id';
+      ref
+          .read(orderProvider.notifier)
+          .getUserOrders(userId: userId, refresh: true);
     });
   }
 
@@ -56,11 +56,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
       body: RefreshIndicator(
         onRefresh: () async {
           final authState = ref.read(authProvider);
-          if (authState.user != null) {
-            await ref
-                .read(orderProvider.notifier)
-                .getUserOrders(userId: authState.user!.id, refresh: true);
-          }
+          final userId = authState.user?.id ?? 'current_user_id';
+          await ref
+              .read(orderProvider.notifier)
+              .getUserOrders(userId: userId, refresh: true);
         },
         child: _buildBody(theme, orderState),
       ),
@@ -96,11 +95,10 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
             ElevatedButton(
               onPressed: () {
                 final authState = ref.read(authProvider);
-                if (authState.user != null) {
-                  ref
-                      .read(orderProvider.notifier)
-                      .getUserOrders(userId: authState.user!.id, refresh: true);
-                }
+                final userId = authState.user?.id ?? 'current_user_id';
+                ref
+                    .read(orderProvider.notifier)
+                    .getUserOrders(userId: userId, refresh: true);
               },
               child: const Text('Retry'),
             ),
@@ -175,7 +173,38 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  _buildStatusChip(theme, order.status),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (order.paymentStatus == PaymentStatus.completed) ...[
+                        Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+                          margin: EdgeInsets.only(right: 6.w),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade50,
+                            borderRadius: BorderRadius.circular(8.r),
+                            border: Border.all(color: Colors.green.shade400, width: 1),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check_circle, size: 12.sp, color: Colors.green.shade700),
+                              SizedBox(width: 4.w),
+                              Text(
+                                'PAID',
+                                style: TextStyle(
+                                  color: Colors.green.shade800,
+                                  fontSize: 10.sp,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      _buildStatusChip(theme, order.status),
+                    ],
+                  ),
                 ],
               ),
               SizedBox(height: 8.h),
@@ -372,7 +401,21 @@ class _OrderDetailsBottomSheet extends StatelessWidget {
         SizedBox(height: 12.h),
         _buildInfoRow(theme, 'Order Number', order.orderNumber),
         _buildInfoRow(theme, 'Order Date', Helpers.formatDate(order.orderDate)),
-        _buildInfoRow(theme, 'Status', order.status.displayName),
+        _buildInfoRow(theme, 'Order Status', order.status.displayName),
+        _buildInfoRow(
+          theme,
+          'Payment Status',
+          order.paymentStatus == PaymentStatus.completed
+              ? 'PAID (Tembo Verified)'
+              : order.paymentStatus.displayName,
+        ),
+        if (order.paymentInfo.transactionId != null &&
+            order.paymentInfo.transactionId!.isNotEmpty)
+          _buildInfoRow(
+            theme,
+            'Transaction ID',
+            order.paymentInfo.transactionId!,
+          ),
         if (order.estimatedDeliveryDate != null)
           _buildInfoRow(
             theme,

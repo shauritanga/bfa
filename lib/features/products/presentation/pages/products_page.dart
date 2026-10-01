@@ -14,6 +14,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../shared/widgets/loading_widget.dart';
 import '../../../../shared/widgets/error_widget.dart';
 import '../../../../shared/widgets/app_bar_widget.dart';
+import '../../../../scripts/seed_data.dart';
 
 class ProductsPage extends ConsumerStatefulWidget {
   final String? categoryId;
@@ -238,9 +239,29 @@ class _ProductsPageState extends ConsumerState<ProductsPage> {
               textAlign: TextAlign.center,
             ),
             SizedBox(height: 24.h),
-            ElevatedButton(
-              onPressed: () => ref.read(productProvider.notifier).clearFilter(),
-              child: const Text('Clear Filters'),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  onPressed: () =>
+                      ref.read(productProvider.notifier).clearFilter(),
+                  child: const Text('Clear Filters'),
+                ),
+                SizedBox(width: 12.w),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Seeding products...')),
+                    );
+                    await DataSeedingService().seedAllData();
+                    await ref
+                        .read(productProvider.notifier)
+                        .loadProducts(refresh: true);
+                  },
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  label: const Text('Seed Products'),
+                ),
+              ],
             ),
           ],
         ),

@@ -42,9 +42,16 @@ class _PaymentStepWidgetState extends ConsumerState<PaymentStepWidget> {
     
     if (paymentMethod != null) {
       _selectedPaymentMethod = paymentMethod;
-      _phoneController.text = paymentMethod.phoneNumber ?? '';
+      _phoneController.text = paymentMethod.phoneNumber ?? '0712345678';
       _accountController.text = paymentMethod.accountNumber ?? '';
       _accountNameController.text = paymentMethod.accountName ?? '';
+    } else {
+      const defaultPhone = '0712345678';
+      _phoneController.text = defaultPhone;
+      _selectedPaymentMethod = CheckoutPaymentMethod.mobileMoney(
+        provider: PaymentProviderType.mpesa,
+        phoneNumber: defaultPhone,
+      );
     }
   }
 
@@ -77,31 +84,17 @@ class _PaymentStepWidgetState extends ConsumerState<PaymentStepWidget> {
                   ),
                   SizedBox(height: 24.h),
 
-                  // Cash on Delivery
+                  // Mobile Money (Tembo)
                   _buildPaymentOption(
-                    title: 'Cash on Delivery',
-                    subtitle: 'Pay when you receive your order',
-                    icon: Icons.money,
-                    isSelected: _selectedPaymentMethod?.type == PaymentMethodType.cashOnDelivery,
-                    onTap: () {
-                      setState(() {
-                        _selectedPaymentMethod = CheckoutPaymentMethod.cashOnDelivery();
-                      });
-                    },
-                  ),
-                  SizedBox(height: 16.h),
-
-                  // Mobile Money
-                  _buildPaymentOption(
-                    title: 'Mobile Money',
-                    subtitle: 'Pay with M-Pesa, Tigo Pesa, Airtel Money',
+                    title: 'Mobile Money (USSD Push)',
+                    subtitle: 'M-Pesa, Tigo Pesa, Airtel Money, HaloPesa • Powered by Tembo',
                     icon: Icons.phone_android,
                     isSelected: _selectedPaymentMethod?.type == PaymentMethodType.mobileMoney,
                     onTap: () {
                       setState(() {
                         _selectedPaymentMethod = CheckoutPaymentMethod.mobileMoney(
-                          provider: PaymentProviderType.mpesa,
-                          phoneNumber: _phoneController.text,
+                          provider: _selectedPaymentMethod?.provider ?? PaymentProviderType.mpesa,
+                          phoneNumber: _phoneController.text.isNotEmpty ? _phoneController.text : '0712345678',
                         );
                       });
                     },
@@ -112,6 +105,21 @@ class _PaymentStepWidgetState extends ConsumerState<PaymentStepWidget> {
                     SizedBox(height: 16.h),
                     _buildMobileMoneyDetails(),
                   ],
+
+                  SizedBox(height: 16.h),
+
+                  // Cash on Delivery
+                  _buildPaymentOption(
+                    title: 'Cash on Delivery',
+                    subtitle: 'Pay cash when you receive your order',
+                    icon: Icons.money,
+                    isSelected: _selectedPaymentMethod?.type == PaymentMethodType.cashOnDelivery,
+                    onTap: () {
+                      setState(() {
+                        _selectedPaymentMethod = CheckoutPaymentMethod.cashOnDelivery();
+                      });
+                    },
+                  ),
 
                   SizedBox(height: 16.h),
 
